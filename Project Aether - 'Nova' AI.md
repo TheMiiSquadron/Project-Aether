@@ -20,3 +20,4 @@ The original Project Aether design document has been split into focused document
 * [Conceptual Data Model](docs/08-Conceptual-Data-Model.md)
 * [Event Model](docs/09-Event-Model.md)
 * [UX Philosophy](docs/10-UX-Philosophy.md)
+* [UI Design](docs/11-UI-Design.md)

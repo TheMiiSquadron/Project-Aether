@@ -19,5 +19,6 @@ Status: Planning
 * [Conceptual Data Model](docs/08-Conceptual-Data-Model.md)
 * [Event Model](docs/09-Event-Model.md)
 * [UX Philosophy](docs/10-UX-Philosophy.md)
+* [UI Design](docs/11-UI-Design.md)
 
 The original living design document has been split into focused documentation files. Existing links can still start from [Project Aether - 'Nova' AI.md](Project%20Aether%20-%20'Nova'%20AI.md).
