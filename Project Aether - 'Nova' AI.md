@@ -19,4 +19,4 @@ The original Project Aether design document has been split into focused document
 * [Initial Interface Contracts](docs/07-Initial-Interface-Contracts.md)
 * [Conceptual Data Model](docs/08-Conceptual-Data-Model.md)
 * [Event Model](docs/09-Event-Model.md)
-* [UI Design](docs/10-UI-Design.md)
+* [UX Philosophy](docs/10-UX-Philosophy.md)
