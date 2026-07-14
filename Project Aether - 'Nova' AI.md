@@ -267,6 +267,100 @@ The UI does not assemble prompts, call Ollama directly, or own persistence.
 
 Components communicate through explicit interfaces and events. Implementation details must remain behind their owning subsystem.
 
+## Conceptual Data Model
+
+These entities describe the shared language of Aether v0.1. They are conceptual entities, not finalized Rust structs or database schemas.
+
+### Conversation
+
+Represents one active or saved chat session and remains independent of the storage format used to persist it.
+
+**Fields**
+
+* id
+* title
+* created_at
+* updated_at
+* messages
+* selected_model
+* metadata
+
+### Message
+
+Represents one item in a conversation, whether provided by the system, the user, or the assistant.
+
+**Fields**
+
+* id
+* role (`system`, `user`, `assistant`)
+* content
+* timestamp
+* status
+* metadata
+
+Initial message statuses are `pending`, `streaming`, `complete`, `cancelled`, and `error`.
+
+### Model
+
+Represents provider-neutral model metadata that the rest of the application can use without knowing provider-specific details.
+
+**Fields**
+
+* id
+* display_name
+* provider_id
+* context_length
+* supports_streaming
+* available
+
+### Provider
+
+Represents a model provider, such as Ollama, and the normalized state Aether needs in order to use it.
+
+**Fields**
+
+* id
+* display_name
+* version
+* status
+* models
+* capabilities
+
+Initial provider statuses include `available`, `unavailable`, and `error`.
+
+### Settings
+
+Represents application configuration, not conversation history or long-term memory data.
+
+**Fields**
+
+* theme
+* default_provider
+* default_model
+* font_size
+* behavior_options
+* developer_mode
+
+## Event Model
+
+Events describe the initial v0.1 application lifecycle and the state changes components can react to.
+
+* ConversationStarted occurs when a new conversation session begins and carries the conversation id, initial selected model, and timestamp.
+* MessageSubmitted occurs when the user submits input and carries the conversation id, message id, role, content, and timestamp.
+* GenerationStarted occurs when the Conversation Engine begins requesting an assistant response and carries the conversation id, assistant message id, provider id, model id, and timestamp.
+* ResponseChunkReceived occurs when a streamed response fragment arrives and carries the conversation id, assistant message id, chunk content, and sequence information.
+* MessageUpdated occurs when a message changes after creation and carries the conversation id, message id, updated content or status, and timestamp.
+* GenerationCompleted occurs when an assistant response finishes successfully and carries the conversation id, assistant message id, final status, and timestamp.
+* GenerationCancelled occurs when an active response is stopped before completion and carries the conversation id, assistant message id, cancellation source, and timestamp.
+* GenerationFailed occurs when generation cannot complete and carries the conversation id, assistant message id when available, normalized error information, and timestamp.
+* ProviderStatusChanged occurs when a provider's availability or health changes and carries the provider id, new status, optional status details, and timestamp.
+* ModelSelectionChanged occurs when the active model changes and carries the conversation id when applicable, provider id, model id, and timestamp.
+* ConversationCleared occurs when the current conversation is reset or cleared and carries the previous conversation id and timestamp.
+
+### Event Rule
+
+Events describe state changes. Components react only to events relevant to them, and provider-specific details must be normalized before entering the application event stream.
+
 ## Core Principles
 
 • Local-first  
