@@ -21,3 +21,4 @@ The original Project Aether design document has been split into focused document
 * [Event Model](docs/09-Event-Model.md)
 * [UX Philosophy](docs/10-UX-Philosophy.md)
 * [UI Design](docs/11-UI-Design.md)
+* [Settings Design — v0.1](docs/12-Settings-Design-v0.1.md)
