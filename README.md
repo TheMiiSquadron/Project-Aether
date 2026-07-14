@@ -8,6 +8,7 @@ Status: Planning
 
 ## Documentation
 
+* [Project Status](docs/00-Project-Status.md)
 * [Roadmap](ROADMAP.md)
 * [Mission and Principles](docs/01-Mission-and-Principles.md)
 * [Nova Personality](docs/02-Nova-Personality.md)
@@ -21,5 +22,6 @@ Status: Planning
 * [UX Philosophy](docs/10-UX-Philosophy.md)
 * [UI Design](docs/11-UI-Design.md)
 * [Settings Design — v0.1](docs/12-Settings-Design-v0.1.md)
+* [Architecture Freeze Review v0.1](docs/Architecture-Freeze-Review-v0.1.md)
 
 The original living design document has been split into focused documentation files. Existing links can still start from [Project Aether - 'Nova' AI.md](Project%20Aether%20-%20'Nova'%20AI.md).

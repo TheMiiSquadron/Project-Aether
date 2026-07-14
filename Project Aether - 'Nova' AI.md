@@ -9,6 +9,7 @@ The original Project Aether design document has been split into focused document
 ## Documentation Index
 
 * [README](README.md)
+* [Project Status](docs/00-Project-Status.md)
 * [Roadmap](ROADMAP.md)
 * [Mission and Principles](docs/01-Mission-and-Principles.md)
 * [Nova Personality](docs/02-Nova-Personality.md)
@@ -22,3 +23,4 @@ The original Project Aether design document has been split into focused document
 * [UX Philosophy](docs/10-UX-Philosophy.md)
 * [UI Design](docs/11-UI-Design.md)
 * [Settings Design — v0.1](docs/12-Settings-Design-v0.1.md)
+* [Architecture Freeze Review v0.1](docs/Architecture-Freeze-Review-v0.1.md)
