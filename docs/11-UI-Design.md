@@ -70,6 +70,32 @@ During generation, Nova's response should stream into the conversation naturally
 
 Errors and cancelled responses should appear in context so the user understands what happened without leaving the conversation.
 
+### Empty State Experience
+
+The empty conversation is centered vertically and horizontally.
+
+Aether v0.1 opens directly into a clean conversation view with no sidebar. The first screen should contain only the essential identity, greeting, and composer:
+
+```text
+Nova
+
+Hello, Alex.
+
+What's on the agenda today?
+```
+
+Beneath the greeting, the message composer should be visible with placeholder text similar to `Message Nova...`.
+
+The text cursor should already be focused in the composer so the user can begin typing immediately without clicking.
+
+No suggested prompts, onboarding cards, tutorials, news, or dashboard widgets are shown.
+
+The empty state should feel like the beginning of a conversation rather than the beginning of a software session.
+
+When the user sends the first message, the centered greeting gracefully disappears and the interface transitions into normal conversation mode, with the conversation aligned naturally for continued chat.
+
+Design note: the greeting should remain calm, concise, and conversational. It should avoid overly enthusiastic onboarding language.
+
 ## Message Composer
 
 The message composer remains visible at the bottom of the window.
