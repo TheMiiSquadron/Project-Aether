@@ -4,7 +4,35 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: Planning
+Status: v0.1 scaffold started
+
+## Development
+
+Install dependencies:
+
+```sh
+npm install
+```
+
+Run the web development shell:
+
+```sh
+npm run dev
+```
+
+Run the Tauri desktop app:
+
+```sh
+npm run tauri -- dev
+```
+
+Validate the scaffold:
+
+```sh
+npm test
+npm run build
+cd src-tauri && cargo test
+```
 
 ## Documentation
 

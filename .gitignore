@@ -3,6 +3,9 @@
 .AppleDouble
 .LSOverride
 Icon?
+!src-tauri/icons/
+!src-tauri/icons/icon.png
+!src-tauri/icons/icon.svg
 
 # Editors
 .vscode/*
