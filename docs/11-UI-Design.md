@@ -136,17 +136,74 @@ Design note: the greeting should remain calm, concise, and conversational. It sh
 
 ## Message Composer
 
-The message composer remains visible at the bottom of the window.
+The message composer remains pinned to the bottom of the window and stays visible while the conversation scrolls.
+
+The composer is the most frequently used control in Aether. It should prioritize comfort, speed, and simplicity over visual
+novelty.
 
 It should provide:
 
 * Auto-growing multiline input
 * Enter sends the message
 * Shift+Enter inserts a newline
+* Always-visible Send button for discoverability
 * Send becomes Stop while Nova is generating
 * Clear conversation as a secondary action
 
 The composer should feel lightweight and reliable. Clear conversation should not compete visually with Send because it is less frequent and potentially disruptive.
+
+Conceptual layout:
+
+```text
+┌────────────────────────────────────────────────────────────┐
+│ +  Message Nova...                                   Send │
+└────────────────────────────────────────────────────────────┘
+```
+
+### Attachments
+
+The left side of the composer includes a compact `+` button for attachments.
+
+For v0.1, attachments are intentionally limited to text-based content. Supported examples include:
+
+* `.txt`
+* `.md`
+* `.py`
+* `.rs`
+* `.ts`
+* `.json`
+* `.yaml`
+* `.toml`
+* `.log`
+
+Images, video, audio, and PDF attachments are intentionally deferred.
+
+Selecting `+` opens a lightweight attachment menu with minimal options, such as:
+
+* Attach Text File...
+* Recent Files...
+* Paste Clipboard...
+
+The attachment menu should remain intentionally minimal.
+
+Design principle: **Support workflows before media.** Aether v0.1 is primarily a thinking and coding environment rather than a
+multimedia chat client.
+
+### Character Counter
+
+A character or context counter is optional and disabled by default.
+
+Users may enable it from Settings.
+
+### Appearance
+
+The message composer appearance should be configurable in Settings.
+
+Supported styles:
+
+* Rounded
+* Subtle (default)
+* Square
 
 ## Sidebar
 
