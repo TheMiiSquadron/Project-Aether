@@ -22,8 +22,8 @@ Conceptual layout:
 
 ```text
 ┌──────────────────────────────────────────────────────────┐
-│ Aether                                      ● Connected  │
-│ Nova                                        qwen3:8b  ⚙  │
+│ Aether                                      🟢 qwen3:8b ▼ │
+│ Nova                                                   ⚙ │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │                                                          │
@@ -45,11 +45,49 @@ The header provides lightweight orientation without becoming a command center.
 It should include:
 
 * Aether/Nova identity
-* Provider connection indicator
-* Selected model
+* Combined model and provider readiness control
 * Settings button
 
 The header should avoid a traditional menu-heavy interface. Aether should not feel like a dense desktop utility in v0.1. Menus may exist where the operating system expects them, but the primary experience should remain conversation-first.
+
+### Model & Status Control
+
+Aether v0.1 should place a single compact control in the top-right corner of the window for model selection and provider readiness.
+
+The control combines:
+
+* Provider readiness indicator
+* Current model name
+* Dropdown affordance
+
+Default appearance example:
+
+```text
+🟢 qwen3:8b ▼
+```
+
+Status colors:
+
+* Green = Ready
+* Yellow = Connecting
+* Red = Unavailable
+
+The control should avoid labels such as `Connected` and should not expose technical implementation details in normal use.
+
+The purpose of the control is to answer one question: "Can I talk to Nova right now, and which model am I using?"
+
+Selecting the control opens a lightweight popover.
+
+The popover displays:
+
+* Provider name, such as Ollama
+* Available models
+* Current model indicator
+* A final action such as `Manage Models...`
+
+The popover should remain intentionally minimal. It should not expose provider diagnostics or developer-oriented information during normal use.
+
+UX note: model selection and provider readiness are intentionally combined into one control. This reduces visual clutter while keeping the essential readiness and model information always visible.
 
 ## Conversation Area
 
@@ -124,7 +162,7 @@ Aether should check Ollama automatically at launch and present one of three stat
 
 Aether opens directly to the normal empty conversation screen.
 
-The selected or default model is ready, the provider indicator shows a connected state, and the user can start typing immediately.
+The selected or default model is ready, the model and status control shows a ready state, and the user can start typing immediately.
 
 ### Ollama Available Without Models
 
