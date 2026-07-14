@@ -32,6 +32,7 @@ Nova can hold a reliable, streaming conversation using a local AI model.
 * Streaming responses
 * Markdown rendering
 * Code blocks
+* User-initiated text/code attachment context
 * Copy response
 * Stop generation
 * Clear conversation
@@ -42,7 +43,7 @@ Nova can hold a reliable, streaming conversation using a local AI model.
 
 * Permanent conversation history
 * Long-term memory
-* Tools/file access
+* Tools/general file access
 * Coding actions
 * Portal integration
 * Agents

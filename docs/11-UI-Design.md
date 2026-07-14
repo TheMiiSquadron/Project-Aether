@@ -50,6 +50,19 @@ It should include:
 
 The header should avoid a traditional menu-heavy interface. Aether should not feel like a dense desktop utility in v0.1. Menus may exist where the operating system expects them, but the primary experience should remain conversation-first.
 
+## Window Behavior
+
+Aether v0.1 should use a standard native title bar rather than custom window chrome.
+
+The window should be resizable.
+
+Initial sizing targets:
+
+* Default size: approximately 1100 x 750.
+* Minimum size: approximately 800 x 600.
+
+The app should restore the previous window size on launch while still opening into a new empty conversation.
+
 ### Model & Status Control
 
 Aether v0.1 should place a single compact control in the top-right corner of the window for model selection and provider readiness.
@@ -88,6 +101,12 @@ The popover displays:
 The popover should remain intentionally minimal. It should not expose provider diagnostics or developer-oriented information during normal use.
 
 UX note: model selection and provider readiness are intentionally combined into one control. This reduces visual clutter while keeping the essential readiness and model information always visible.
+
+### Manage Models
+
+For v0.1, `Manage Models...` opens a simple local guidance dialog with installation and help information for Ollama models.
+
+This dialog may include common commands and guidance for installing or refreshing local models, but it is not a full model manager. Downloading, deleting, updating, and organizing models are deferred.
 
 ## Conversation Area
 
@@ -134,6 +153,16 @@ When the user sends the first message, the centered greeting gracefully disappea
 
 Design note: the greeting should remain calm, concise, and conversational. It should avoid overly enthusiastic onboarding language.
 
+For v0.1, the greeting is fixed:
+
+```text
+Hello, Alex.
+
+What's on the agenda today?
+```
+
+Custom greetings and display-name personalization are deferred.
+
 ## Message Composer
 
 The message composer remains pinned to the bottom of the window and stays visible while the conversation scrolls.
@@ -148,7 +177,7 @@ It should provide:
 * Shift+Enter inserts a newline
 * Always-visible Send button for discoverability
 * Send becomes Stop while Nova is generating
-* Clear conversation as a secondary action
+* Clear conversation in a secondary overflow menu
 
 The composer should feel lightweight and reliable. Clear conversation should not compete visually with Send because it is less frequent and potentially disruptive.
 
@@ -164,24 +193,34 @@ Conceptual layout:
 
 The left side of the composer includes a compact `+` button for attachments.
 
-For v0.1, attachments are intentionally limited to text-based content. Supported examples include:
+For v0.1, attachments are user-initiated message context, not Tools or general file-access capabilities.
+
+The user explicitly chooses or pastes text content. Aether may read that selected content into the current message context, but Nova cannot browse folders, search the filesystem, edit files, or access files independently.
+
+Attachments are intentionally limited to a single UTF-8 text/code file up to 1 MB.
+
+Supported examples include:
 
 * `.txt`
 * `.md`
 * `.py`
 * `.rs`
 * `.ts`
+* `.tsx`
+* `.js`
 * `.json`
 * `.yaml`
+* `.yml`
 * `.toml`
 * `.log`
 
 Images, video, audio, and PDF attachments are intentionally deferred.
 
+Unsupported files should produce a friendly, actionable message explaining that v0.1 only accepts one UTF-8 text/code file up to 1 MB.
+
 Selecting `+` opens a lightweight attachment menu with minimal options, such as:
 
 * Attach Text File...
-* Recent Files...
 * Paste Clipboard...
 
 The attachment menu should remain intentionally minimal.
@@ -204,6 +243,14 @@ Supported styles:
 * Rounded
 * Subtle (default)
 * Square
+
+## Conversation Actions
+
+Clear Conversation lives in a compact secondary overflow menu, such as `...`, away from the primary Send/Stop action.
+
+Confirmation is enabled by default before clearing the current conversation.
+
+Assistant messages expose a compact Copy action on hover or in an equivalent unobtrusive message action area.
 
 ## Sidebar
 

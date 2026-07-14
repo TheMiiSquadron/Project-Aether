@@ -1,14 +1,14 @@
 # Architecture Freeze Review v0.1
 
-**Status:** Review Complete  
+**Status:** Freeze Complete  
 **Date:** 2026-07-14  
 **Scope:** Documentation-only review before scaffolding the initial Tauri application.
 
 ## Executive Summary
 
-Project Aether is close to ready for v0.1 scaffolding. The documentation provides a clear mission, focused v0.1 scope, strong subsystem boundaries, a defined technology stack, conceptual data and event models, UX principles, UI direction, and initial settings design.
+Project Aether is ready for v0.1 scaffolding. The documentation provides a clear mission, focused v0.1 scope, strong subsystem boundaries, a defined technology stack, conceptual data and event models, UX principles, UI direction, and initial settings design.
 
-The primary issue to resolve before implementation is the boundary between v0.1 text attachments and the roadmap's deferred `Tools/file access` item. This is the only finding that could reasonably cause two engineers to build materially different v0.1 behavior.
+The previous clarification items have been resolved. Text attachments are defined as user-initiated message context, not Tools or general file-access capability. Remaining future work is intentionally deferred rather than blocking the initial scaffold.
 
 ## Strengths
 
@@ -20,64 +20,63 @@ The primary issue to resolve before implementation is the boundary between v0.1 
 * The event model gives implementation a shared lifecycle for sending, streaming, cancelling, failing, and clearing messages.
 * The settings design follows the rule that every v0.1 setting must correspond to real behavior.
 
-## Ambiguities
+## Resolved Clarifications
 
-1. **Text attachments vs. deferred file access.** `ROADMAP.md` and `docs/03-v0.1-First-Conversation.md` defer `Tools/file access`, while `docs/11-UI-Design.md` includes text-based attachments in v0.1. The project should clarify whether attaching text files is part of the chat input surface or deferred as file access.
-2. **Attachment handling details.** If text attachments remain in v0.1, the docs do not yet define file size limits, encoding handling, max attachment count, whether content is inserted into the composer or attached as metadata, and how unsupported files are explained.
-3. **Clear conversation placement.** Clear conversation is in v0.1 scope, but the UI only says it should be a secondary action. The exact location and confirmation behavior should be clarified before implementation.
-4. **Copy response placement.** Copy response is in v0.1 scope, but the UI does not define where the control appears or whether it is shown persistently, on hover, or in a message action menu.
-5. **Markdown streaming behavior.** The UI allows Markdown/code blocks to render as content arrives or after completion. This is acceptable as implementation flexibility, but it should be treated as an explicit implementation choice during scaffolding.
-6. **Launch behavior setting.** Settings include launch behavior, but the available options and default are not defined.
-7. **Model-management guidance.** The UI and settings mention `Manage Models...` or model-management guidance, but do not define whether this opens instructions, a local modal, an external Ollama page, or a future management screen.
-8. **Greeting personalization.** Settings include greeting personalization, but the supported behavior is not defined beyond the current `Hello, Alex.` empty state.
+1. **Text attachments vs. deferred file access.** v0.1 keeps text attachments, but only as user-initiated message context. Nova cannot browse folders, search the filesystem, edit files, or access files independently.
+2. **Attachment handling details.** v0.1 allows one UTF-8 text/code file up to 1 MB. Supported examples include `.txt`, `.md`, `.py`, `.rs`, `.ts`, `.tsx`, `.js`, `.json`, `.yaml`, `.yml`, `.toml`, and `.log`.
+3. **Recent Files.** `Recent Files...` is deferred and removed from the v0.1 attachment menu.
+4. **Clear Conversation.** Clear Conversation lives in a secondary overflow menu with confirmation enabled by default.
+5. **Copy Response.** Assistant messages expose a compact Copy action on hover or in an equivalent unobtrusive message action area.
+6. **Window Behavior.** The v0.1 window is resizable, defaults to approximately 1100 x 750, has a minimum size of approximately 800 x 600, and uses a standard native title bar.
+7. **Settings Storage.** v0.1 settings use a human-readable JSON or TOML file in the standard Tauri application config/data directory.
+8. **Structured Logs.** Structured logs are minimal or off by default, stored in the application log directory, with advanced logging controls deferred.
+9. **Launch Behavior.** Aether opens directly into a new empty conversation while restoring the previous window size and last selected model when available.
+10. **Error Detail Levels.** Normal mode shows friendly, actionable messages. Developer Mode may reveal technical diagnostics.
+11. **Model Management Guidance.** `Manage Models...` opens a simple local guidance dialog, not a full model manager.
+12. **Greeting Personalization.** v0.1 uses the fixed greeting `Hello, Alex.` and `What's on the agenda today?`; custom greetings are deferred.
 
-## Missing Decisions
+## Remaining Implementation Flexibility
 
-1. **Initial Tauri scaffold shape.** The docs define Tauri, React, TypeScript, Vite, Rust, and Ollama, but do not specify whether to use the current stable Tauri template defaults or a custom workspace layout.
-2. **Minimum window behavior.** The docs do not define minimum window size, default window size, resizability, or titlebar style.
-3. **Settings storage file.** Storage is intentionally abstracted, but scaffolding still needs a first concrete settings location and file format for v0.1.
-4. **Log storage location.** Structured logs are in v0.1 settings, but log location, rotation, and default enabled state are not defined.
-5. **Provider timeout and retry behavior.** First-launch states describe available, no models, and unavailable, but the timeout threshold and retry behavior are not specified.
-6. **Error message tone and detail levels.** Developer settings can show diagnostic details, but normal-user error detail level is not yet defined.
-7. **Accessibility baseline.** Accessibility is a principle, but implementation-specific baseline decisions such as focus order, reduced motion handling, and keyboard navigation targets are not yet documented.
+The following are acceptable implementation choices during scaffolding and do not block v0.1:
+
+* Whether Markdown renders progressively during streaming or after each assistant response completes.
+* Whether the initial Tauri scaffold uses stable template defaults or a light custom layout, as long as the documented architecture remains intact.
+* Exact provider timeout thresholds, as long as retry behavior is clear and user-facing errors remain friendly.
+* Detailed accessibility implementation choices, as long as keyboard focus, readable contrast, and reduced-motion respect remain part of v0.1 quality expectations.
 
 ## Contradictions
 
-One contradiction or near-contradiction was found:
-
-* The roadmap defers `Tools/file access`, while UI Design includes text-based attachments in v0.1. This may be resolvable by defining text attachments as message input rather than general file access, but the distinction should be made explicit before scaffolding.
-
-No other direct contradictions were found.
+No direct contradictions remain for v0.1 scaffolding.
 
 ## Scope Review
 
-The v0.1 scope remains mostly disciplined. Permanent conversation history, long-term memory, tools, coding actions, Portal integration, agents, voice, automation, plugins, and advanced privacy settings are consistently deferred.
+The v0.1 scope remains disciplined. Permanent conversation history, long-term memory, tools, general file access, coding actions, Portal integration, agents, voice, automation, plugins, advanced privacy settings, multimedia attachments, recent files, full model management, custom greetings, and advanced logging are consistently deferred.
 
-The main scope risk is text attachments. They may be valuable for coding workflows, but they introduce filesystem access, file validation, content sizing, unsupported-file handling, and privacy expectations. If retained in v0.1, they should be tightly specified as limited text-import into the current prompt rather than a general tool or file-access system.
-
-The `Recent Files...` attachment menu item also risks implying a persistent recent-file system. Unless specifically required for v0.1, it should either be deferred or documented as optional future behavior.
+Text attachments remain in scope only because they are tightly specified as user-selected message context. They do not introduce autonomous file access or tool behavior.
 
 ## Recommendation
 
-**Ready with Minor Clarifications**
+**Ready for Scaffold**
 
-Aether is ready to proceed toward scaffolding after a small clarification pass. The architecture is strong enough to scaffold the Tauri application, but the attachment/file-access boundary and a handful of UI placement/default decisions should be resolved before implementing interactive behavior.
+Aether is ready to scaffold the initial Tauri application according to the frozen v0.1 documentation.
 
-## Prioritized Checklist
+## Intentionally Deferred Future Work
 
-1. Clarify whether v0.1 includes text attachments or defers all file attachment behavior.
-2. If text attachments remain in v0.1, define limits, accepted encodings, max file size, max file count, prompt insertion behavior, and unsupported-file errors.
-3. Decide whether `Recent Files...` belongs in v0.1 or should be deferred.
-4. Define where Clear Conversation lives and how confirmation works.
-5. Define where Copy Response appears in the message UI.
-6. Define default window size, minimum window size, resizability, and titlebar approach.
-7. Define v0.1 settings storage format and location.
-8. Define structured log defaults and log location.
-9. Define launch behavior setting options and default.
-10. Define normal-user vs. developer error detail levels.
-11. Define the exact model-management guidance behavior for v0.1.
-12. Define greeting personalization behavior or defer the setting.
+* Permanent conversation history.
+* Long-term memory.
+* Tools and autonomous file access.
+* Coding actions.
+* Portal integration.
+* Agents.
+* Voice.
+* Automation.
+* Plugins.
+* Multimedia attachments.
+* Recent-file persistence.
+* Full model management.
+* Custom greetings and display-name personalization.
+* Advanced logging and retention controls.
 
 ## Remaining Clarification Count
 
-12
+0

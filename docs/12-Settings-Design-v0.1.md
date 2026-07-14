@@ -20,6 +20,14 @@ Purpose:
 
 General settings should make Aether predictable when it opens, preserve the user's expected model choice, and protect against accidental loss of the current temporary conversation.
 
+Default launch behavior:
+
+* Open directly into a new empty conversation.
+* Restore the previous window size.
+* Restore the last selected model when available.
+
+Complex startup modes, startup dashboards, and automatic conversation restoration are deferred.
+
 ## Appearance
 
 Appearance settings control comfort, readability, and the shape of the primary interaction surface.
@@ -66,6 +74,16 @@ Purpose:
 
 Behavior settings should make the chat experience feel natural while preserving the defaults expected by most users.
 
+For v0.1, greeting personalization is fixed to the default empty-state greeting:
+
+```text
+Hello, Alex.
+
+What's on the agenda today?
+```
+
+Custom greetings and display-name personalization are deferred.
+
 ## Developer
 
 Developer settings expose diagnostic tools for troubleshooting and implementation work.
@@ -79,6 +97,18 @@ Included settings:
 Purpose:
 
 Developer settings should remain out of the way during normal use, but available when Aether needs to be inspected, debugged, or verified during development.
+
+Structured logs are minimal or off by default. When enabled, logs are stored in the standard application log directory.
+
+Advanced logging controls, log rotation policy, and log retention settings are deferred.
+
+Normal mode should show friendly, actionable error messages. Developer Mode may reveal technical diagnostics such as provider endpoints, raw error details, status codes, or stack traces when useful for debugging.
+
+## Storage Defaults
+
+v0.1 settings are stored as a human-readable JSON or TOML file in the standard Tauri application config/data directory.
+
+The implementation may choose either JSON or TOML for the first release, but the file should remain inspectable and editable during development.
 
 ## Deferred Settings
 
