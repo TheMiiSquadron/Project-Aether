@@ -1,6 +1,6 @@
 :root {
   color: #f2eee7;
-  background: #14110f;
+  background: #151014;
   font-family:
     Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
     sans-serif;
@@ -8,6 +8,90 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.aether-shell {
+  --shell-text: #f6edf0;
+  --shell-background: #151014;
+  --shell-gradient-top: #1b1117;
+  --shell-gradient-bottom: #0e0b0d;
+  --shell-glow: rgba(122, 33, 49, 0.2);
+  --header-background: rgba(21, 16, 20, 0.8);
+  --header-border: rgba(246, 237, 240, 0.08);
+  --control-border: rgba(246, 237, 240, 0.13);
+  --control-background: rgba(255, 247, 248, 0.055);
+  --control-hover-border: rgba(246, 237, 240, 0.24);
+  --control-hover-background: rgba(255, 247, 248, 0.085);
+  --focus-ring: rgba(184, 83, 96, 0.72);
+  --primary-text: #fff6f7;
+  --secondary-text: rgba(246, 237, 240, 0.78);
+  --muted-text: rgba(246, 237, 240, 0.68);
+  --placeholder-text: rgba(246, 237, 240, 0.42);
+  --model-text: #f1e4e8;
+  --status-ready: #75d69a;
+  --status-ready-glow: rgba(117, 214, 154, 0.14);
+  --composer-fade: rgba(14, 11, 13, 0.94);
+  --accent-background: #d8c2b1;
+  --accent-background-hover: #ead0bd;
+  --accent-border-hover: rgba(216, 194, 177, 0.72);
+  --accent-text: #1b0e10;
+  --textarea-background: rgba(255, 247, 248, 0.07);
+}
+
+.aether-shell[data-theme="obsidian"] {
+  --shell-text: #f4efe8;
+  --shell-background: #14110f;
+  --shell-gradient-top: #171310;
+  --shell-gradient-bottom: #100e0c;
+  --shell-glow: rgba(148, 124, 93, 0.13);
+  --header-background: rgba(20, 17, 15, 0.78);
+  --header-border: rgba(244, 239, 232, 0.08);
+  --control-border: rgba(244, 239, 232, 0.12);
+  --control-background: rgba(255, 255, 255, 0.055);
+  --control-hover-border: rgba(244, 239, 232, 0.23);
+  --control-hover-background: rgba(255, 255, 255, 0.085);
+  --focus-ring: rgba(218, 183, 132, 0.72);
+  --primary-text: #fff9ef;
+  --secondary-text: rgba(244, 239, 232, 0.78);
+  --muted-text: rgba(244, 239, 232, 0.68);
+  --placeholder-text: rgba(244, 239, 232, 0.42);
+  --model-text: #efe7dd;
+  --status-ready: #69d38d;
+  --status-ready-glow: rgba(105, 211, 141, 0.13);
+  --composer-fade: rgba(16, 14, 12, 0.94);
+  --accent-background: #ead4b4;
+  --accent-background-hover: #f3dfbf;
+  --accent-border-hover: rgba(234, 212, 180, 0.72);
+  --accent-text: #1a120c;
+  --textarea-background: rgba(255, 255, 255, 0.07);
+}
+
+.aether-shell[data-theme="observatory"] {
+  --shell-text: #edf3fa;
+  --shell-background: #10141b;
+  --shell-gradient-top: #121925;
+  --shell-gradient-bottom: #0a0e14;
+  --shell-glow: rgba(83, 124, 184, 0.17);
+  --header-background: rgba(16, 20, 27, 0.8);
+  --header-border: rgba(237, 243, 250, 0.08);
+  --control-border: rgba(237, 243, 250, 0.13);
+  --control-background: rgba(239, 246, 255, 0.055);
+  --control-hover-border: rgba(237, 243, 250, 0.24);
+  --control-hover-background: rgba(239, 246, 255, 0.085);
+  --focus-ring: rgba(106, 148, 203, 0.72);
+  --primary-text: #f8fbff;
+  --secondary-text: rgba(237, 243, 250, 0.78);
+  --muted-text: rgba(237, 243, 250, 0.68);
+  --placeholder-text: rgba(237, 243, 250, 0.42);
+  --model-text: #e2ebf5;
+  --status-ready: #71d7b0;
+  --status-ready-glow: rgba(113, 215, 176, 0.14);
+  --composer-fade: rgba(10, 14, 20, 0.94);
+  --accent-background: #c9d8e8;
+  --accent-background-hover: #d7e5f2;
+  --accent-border-hover: rgba(201, 216, 232, 0.72);
+  --accent-text: #0c121b;
+  --textarea-background: rgba(239, 246, 255, 0.07);
 }
 
 * {
@@ -40,9 +124,9 @@ textarea {
   height: 100%;
   min-height: 600px;
   background:
-    radial-gradient(circle at 50% 0%, rgba(148, 124, 93, 0.13), transparent 34rem),
-    linear-gradient(180deg, #171310 0%, #100e0c 100%);
-  color: #f4efe8;
+    radial-gradient(circle at 50% 0%, var(--shell-glow), transparent 34rem),
+    linear-gradient(180deg, var(--shell-gradient-top) 0%, var(--shell-gradient-bottom) 100%);
+  color: var(--shell-text);
 }
 
 .app-header {
@@ -52,8 +136,8 @@ textarea {
   gap: 1.5rem;
   min-height: 76px;
   padding: 1rem 1.35rem;
-  border-bottom: 1px solid rgba(244, 239, 232, 0.08);
-  background: rgba(20, 17, 15, 0.78);
+  border-bottom: 1px solid var(--header-border);
+  background: var(--header-background);
   backdrop-filter: blur(20px);
 }
 
@@ -64,7 +148,7 @@ textarea {
 }
 
 .assistant-name {
-  color: #f8f3eb;
+  color: var(--primary-text);
   font-size: 1.08rem;
   font-weight: 700;
 }
@@ -79,9 +163,9 @@ textarea {
 .icon-button,
 .composer-button,
 .send-button {
-  border: 1px solid rgba(244, 239, 232, 0.12);
-  color: #f5efe6;
-  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid var(--control-border);
+  color: var(--shell-text);
+  background: var(--control-background);
   transition:
     border-color 160ms ease,
     background 160ms ease,
@@ -92,8 +176,8 @@ textarea {
 .icon-button:hover,
 .composer-button:hover,
 .send-button:hover {
-  border-color: rgba(244, 239, 232, 0.23);
-  background: rgba(255, 255, 255, 0.085);
+  border-color: var(--control-hover-border);
+  background: var(--control-hover-background);
 }
 
 .model-status:focus-visible,
@@ -101,7 +185,7 @@ textarea {
 .composer-button:focus-visible,
 .send-button:focus-visible,
 textarea:focus-visible {
-  outline: 2px solid rgba(218, 183, 132, 0.72);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -119,14 +203,14 @@ textarea:focus-visible {
   width: 0.58rem;
   height: 0.58rem;
   border-radius: 999px;
-  background: #69d38d;
-  box-shadow: 0 0 0 3px rgba(105, 211, 141, 0.13);
+  background: var(--status-ready);
+  box-shadow: 0 0 0 3px var(--status-ready-glow);
 }
 
 .model-name {
   max-width: 13rem;
   overflow: hidden;
-  color: #efe7dd;
+  color: var(--model-text);
   font-size: 0.9rem;
   font-weight: 600;
   text-overflow: ellipsis;
@@ -141,6 +225,34 @@ textarea:focus-visible {
   place-items: center;
   border-radius: 999px;
   cursor: pointer;
+}
+
+.theme-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.48rem;
+  min-height: 38px;
+  padding: 0 0.68rem;
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  background: var(--control-background);
+  color: var(--secondary-text);
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.theme-switcher select {
+  border: 0;
+  background: transparent;
+  color: var(--primary-text);
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.theme-switcher select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .conversation-region {
@@ -160,14 +272,14 @@ textarea:focus-visible {
 
 .nova-label {
   margin: 0 0 1.55rem;
-  color: rgba(244, 239, 232, 0.68);
+  color: var(--muted-text);
   font-size: 0.96rem;
   font-weight: 700;
 }
 
 .empty-state h1 {
   margin: 0;
-  color: #fff9ef;
+  color: var(--primary-text);
   font-size: clamp(2.15rem, 5vw, 4rem);
   font-weight: 760;
   line-height: 1.08;
@@ -175,7 +287,7 @@ textarea:focus-visible {
 
 .agenda {
   margin: 1.05rem 0 0;
-  color: rgba(244, 239, 232, 0.78);
+  color: var(--secondary-text);
   font-size: clamp(1.22rem, 2.4vw, 1.85rem);
   line-height: 1.35;
 }
@@ -198,7 +310,7 @@ textarea:focus-visible {
   z-index: -1;
   height: 6.8rem;
   content: "";
-  background: linear-gradient(180deg, transparent, rgba(16, 14, 12, 0.94) 42%);
+  background: linear-gradient(180deg, transparent, var(--composer-fade) 42%);
   pointer-events: none;
 }
 
@@ -207,15 +319,15 @@ textarea {
   max-height: 9.5rem;
   padding: 0.82rem 0.95rem;
   resize: none;
-  border: 1px solid rgba(244, 239, 232, 0.13);
+  border: 1px solid var(--control-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.07);
-  color: #fff8ee;
+  background: var(--textarea-background);
+  color: var(--primary-text);
   line-height: 1.42;
 }
 
 textarea::placeholder {
-  color: rgba(244, 239, 232, 0.42);
+  color: var(--placeholder-text);
 }
 
 .send-button {
@@ -227,15 +339,15 @@ textarea::placeholder {
   height: 46px;
   padding: 0 1rem;
   border-radius: 999px;
-  background: #ead4b4;
-  color: #1a120c;
+  background: var(--accent-background);
+  color: var(--accent-text);
   cursor: pointer;
   font-weight: 750;
 }
 
 .send-button:hover {
-  border-color: rgba(234, 212, 180, 0.72);
-  background: #f3dfbf;
+  border-color: var(--accent-border-hover);
+  background: var(--accent-background-hover);
 }
 
 @media (max-width: 860px) {

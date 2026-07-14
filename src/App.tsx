@@ -6,6 +6,14 @@ const placeholderModel = {
   status: "Ready"
 };
 
+const appearancePresets = [
+  { id: "crimson", label: "Crimson" },
+  { id: "obsidian", label: "Obsidian" },
+  { id: "observatory", label: "Observatory" }
+] as const;
+
+type AppearancePreset = (typeof appearancePresets)[number]["id"];
+
 type ComposerActionButtonProps = {
   isGenerating?: boolean;
 };
@@ -25,6 +33,7 @@ function ComposerActionButton({ isGenerating = false }: ComposerActionButtonProp
 export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [message, setMessage] = useState("");
+  const [appearancePreset, setAppearancePreset] = useState<AppearancePreset>("crimson");
 
   useEffect(() => {
     composerRef.current?.focus();
@@ -35,13 +44,28 @@ export function App() {
   };
 
   return (
-    <main className="aether-shell" aria-label="Aether">
+    <main className="aether-shell" data-theme={appearancePreset} aria-label="Aether">
       <header className="app-header">
         <div className="identity" aria-label="Application identity">
           <span className="assistant-name">Nova</span>
         </div>
 
         <div className="header-actions" aria-label="Application controls">
+          <label className="theme-switcher" aria-label="Experimental theme selector">
+            <span>Theme</span>
+            <select
+              aria-label="Experimental theme"
+              value={appearancePreset}
+              onChange={(event) => setAppearancePreset(event.target.value as AppearancePreset)}
+            >
+              {appearancePresets.map((preset) => (
+                <option key={preset.id} value={preset.id}>
+                  {preset.label}
+                </option>
+              ))}
+            </select>
+          </label>
+
           <button className="model-status" type="button" aria-label={`Model ${placeholderModel.name}, ${placeholderModel.status}`}>
             <span className="status-dot" aria-hidden="true" />
             <span className="model-name">{placeholderModel.name}</span>

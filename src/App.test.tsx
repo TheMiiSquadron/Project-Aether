@@ -26,4 +26,18 @@ describe("App shell", () => {
 
     expect(screen.getByLabelText("Message Nova")).toHaveValue("Hello Nova");
   });
+
+  it("offers temporary visual theme presets", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    const shell = screen.getByLabelText("Aether");
+    const themeSelector = screen.getByLabelText("Experimental theme");
+
+    expect(shell).toHaveAttribute("data-theme", "crimson");
+
+    await user.selectOptions(themeSelector, "observatory");
+
+    expect(shell).toHaveAttribute("data-theme", "observatory");
+  });
 });
