@@ -59,15 +59,8 @@ textarea {
 
 .identity {
   display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
+  align-items: center;
   min-width: 0;
-}
-
-.app-name {
-  color: rgba(244, 239, 232, 0.65);
-  font-size: 0.82rem;
-  font-weight: 600;
 }
 
 .assistant-name {
@@ -161,7 +154,7 @@ textarea:focus-visible {
   align-self: center;
   justify-self: center;
   width: min(100%, 42rem);
-  margin-top: -2rem;
+  margin-top: -4.25rem;
   text-align: center;
 }
 
@@ -192,7 +185,7 @@ textarea:focus-visible {
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
   gap: 0.75rem;
-  width: min(calc(100% - 2rem), 58rem);
+  width: min(calc(100% - 2rem), 53rem);
   margin: 0 auto;
   padding: 0.95rem 0 1.18rem;
 }

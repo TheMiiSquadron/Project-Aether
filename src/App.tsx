@@ -1,10 +1,26 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { ChevronDown, Paperclip, Send, Settings } from "lucide-react";
+import { ChevronDown, Paperclip, Send, Settings, Square } from "lucide-react";
 
 const placeholderModel = {
   name: "qwen3:8b",
   status: "Ready"
 };
+
+type ComposerActionButtonProps = {
+  isGenerating?: boolean;
+};
+
+function ComposerActionButton({ isGenerating = false }: ComposerActionButtonProps) {
+  const label = isGenerating ? "Stop" : "Send";
+  const Icon = isGenerating ? Square : Send;
+
+  return (
+    <button className="send-button" type="submit" aria-label={label}>
+      <span>{label}</span>
+      <Icon size={16} strokeWidth={1.9} aria-hidden="true" />
+    </button>
+  );
+}
 
 export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
@@ -22,7 +38,6 @@ export function App() {
     <main className="aether-shell" aria-label="Aether">
       <header className="app-header">
         <div className="identity" aria-label="Application identity">
-          <span className="app-name">Aether</span>
           <span className="assistant-name">Nova</span>
         </div>
 
@@ -65,10 +80,7 @@ export function App() {
           aria-label="Message Nova"
         />
 
-        <button className="send-button" type="submit">
-          <span>Send</span>
-          <Send size={16} strokeWidth={1.9} aria-hidden="true" />
-        </button>
+        <ComposerActionButton />
       </form>
     </main>
   );
