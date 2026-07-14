@@ -6,4 +6,18 @@ Nova is the AI personality users interact with. Aether is the platform underneat
 
 Status: Planning
 
-The main living design document is [Project Aether - 'Nova' AI.md](Project%20Aether%20-%20'Nova'%20AI.md).
+## Documentation
+
+* [Roadmap](ROADMAP.md)
+* [Mission and Principles](docs/01-Mission-and-Principles.md)
+* [Nova Personality](docs/02-Nova-Personality.md)
+* [v0.1 — First Conversation](docs/03-v0.1-First-Conversation.md)
+* [High-Level Architecture](docs/04-High-Level-Architecture.md)
+* [Subsystem Responsibilities](docs/05-Subsystem-Responsibilities.md)
+* [Technology Stack](docs/06-Technology-Stack.md)
+* [Initial Interface Contracts](docs/07-Initial-Interface-Contracts.md)
+* [Conceptual Data Model](docs/08-Conceptual-Data-Model.md)
+* [Event Model](docs/09-Event-Model.md)
+* [UI Design](docs/10-UI-Design.md)
+
+The original living design document has been split into focused documentation files. Existing links can still start from [Project Aether - 'Nova' AI.md](Project%20Aether%20-%20'Nova'%20AI.md).
