@@ -26,6 +26,18 @@ UI -> Conversation Engine -> Model Provider -> Ollama provider
 * One user-provided UTF-8 text/code attachment up to 1 MB.
 * Persisted v0.1 settings for theme, selected model, font size, composer style, context counter, and Developer Mode.
 * Crimson, Obsidian, and Observatory visual themes.
+* Final UI polish for Markdown typography, code-block presentation, unified composer controls, and minimum-height responsive layout.
+
+## Final Polish Commits
+
+The v0.1 release candidate includes the following post-implementation polish commits:
+
+* `b2fbce2` — Polish Markdown typography
+* `e57dee6` — Prefer code blocks for generated files
+* `dd8e186` — Polish code block presentation
+* `1f56f8b` — Unify composer controls
+* `f57b0b7` — Refine composer bottom spacing
+* `9cc812c` — Improve minimum-height responsive layout
 
 ## Intentionally Deferred
 
@@ -50,6 +62,23 @@ The following remain outside v0.1:
 * [x] No known major bugs
 * [x] Documentation current
 * [x] Reproducible macOS build
-* [ ] Windows build validated when NOVA is available
+* [ ] Windows build and core functionality validated on Envy
 * [x] Release notes prepared
 * [ ] Git tag created for v0.1.0
+
+## Windows Validation Target
+
+Envy is the v0.1 Windows validation machine. The release checklist should be marked complete after Envy confirms:
+
+* `npm test`
+* `npm run build`
+* `cargo test` from `src-tauri`
+* `cargo fmt --check` from `src-tauri`
+* `npm run tauri -- build`
+* Aether launches on Windows
+* Ollama model discovery finds the installed baseline models
+* Model switching works
+* Streaming and Stop work
+* Markdown, code blocks, Copy Code, text attachments, settings persistence, theme persistence, clear conversation, generated-file code-block behavior, long responses, and scrolling behave as expected
+
+NOVA validation is deferred to future high-performance testing for larger models, GPU behavior, and sustained long-session use.

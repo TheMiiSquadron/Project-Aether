@@ -2,10 +2,10 @@
 
 **Status:** Living Document  
 **Current Phase:** Implementation  
-**Current Status:** v0.1 local chat implementation complete on macOS/Orion; Windows validation pending when NOVA is available  
+**Current Status:** v0.1 local chat implementation complete on macOS/Orion; Windows validation pending on Envy  
 **Current Target:** v0.1  
 **Last Completed Milestone:** Complete remaining v0.1 polish sequence  
-**Next Milestone:** Validate the v0.1 app manually on Orion, then validate Windows when NOVA is available
+**Next Milestone:** Complete Windows build and core-functionality validation on Envy
 
 Project Aether is being developed design-first. The v0.1 experience, architecture, responsibilities, data model, event model, settings, and UI direction were validated before code was scaffolded.
 
@@ -25,4 +25,6 @@ Aether now discovers installed Ollama models, allows selecting the active model,
 
 Memory, tools, conversation history, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.1.
 
-Release notes are prepared in [Release Notes v0.1.0](Release-Notes-v0.1.0.md). The `v0.1.0` tag should wait until the release-candidate checklist is satisfied, including Windows validation when NOVA is available.
+Release notes are prepared in [Release Notes v0.1.0](Release-Notes-v0.1.0.md). The `v0.1.0` tag should wait until the release-candidate checklist is satisfied, including Windows validation on Envy.
+
+NOVA remains the intended high-performance runtime for larger-model, GPU, and long-session validation after the v0.1 release. It is not required to validate the v0.1 Windows app build.

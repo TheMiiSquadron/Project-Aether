@@ -50,6 +50,15 @@ function latestStreamId() {
   return request.request.streamId;
 }
 
+async function renderApp() {
+  const result = render(<App />);
+
+  await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("load_settings"));
+  await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("list_models"));
+
+  return result;
+}
+
 describe("App shell", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -71,7 +80,10 @@ describe("App shell", () => {
       }
 
       if (command === "list_models") {
-        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+        return Promise.resolve([
+          { name: "llama3.2:latest", provider: "Ollama" },
+          { name: "qwen3:8b", provider: "Ollama" }
+        ]);
       }
 
       if (command === "start_streaming_message") {
@@ -95,23 +107,23 @@ describe("App shell", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
-  it("renders Nova's empty state", () => {
-    render(<App />);
+  it("renders Nova's empty state", async () => {
+    await renderApp();
 
     expect(screen.getAllByText("Nova")).toHaveLength(2);
     expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
     expect(screen.getByText("What's on the agenda today?")).toBeInTheDocument();
   });
 
-  it("focuses the composer on launch", () => {
-    render(<App />);
+  it("focuses the composer on launch", async () => {
+    await renderApp();
 
     expect(screen.getByLabelText("Message Nova")).toHaveFocus();
   });
 
   it("submits one message and renders Nova's response", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     await user.type(screen.getByLabelText("Message Nova"), "Hello Nova{enter}");
     const streamId = latestStreamId();
@@ -146,9 +158,28 @@ describe("App shell", () => {
     expect(screen.getByLabelText("Message Nova")).toHaveValue("");
   });
 
+  it("uses the selected discovered model when sending", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Model llama3.2:latest, Ready" }));
+    await user.click(screen.getByRole("menuitemradio", { name: /qwen3:8b/i }));
+    await user.type(screen.getByLabelText("Message Nova"), "Use Qwen{enter}");
+
+    const streamId = latestStreamId();
+
+    expect(invokeMock).toHaveBeenCalledWith("start_streaming_message", {
+      request: {
+        message: "Use Qwen",
+        model: "qwen3:8b",
+        streamId
+      }
+    });
+  });
+
   it("guards duplicate sends while Nova is generating", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     await user.type(screen.getByLabelText("Message Nova"), "Slow request");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -174,7 +205,7 @@ describe("App shell", () => {
 
   it("shows friendly provider errors", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     await user.type(screen.getByLabelText("Message Nova"), "Are you there?");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -202,7 +233,7 @@ describe("App shell", () => {
 
   it("cancels an active stream and leaves the partial response", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     await user.type(screen.getByLabelText("Message Nova"), "Please continue slowly");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -224,7 +255,7 @@ describe("App shell", () => {
 
   it("persists visual theme preferences from settings", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     const shell = screen.getByLabelText("Aether");
 
@@ -238,7 +269,7 @@ describe("App shell", () => {
 
   it("renders representative Markdown with code copy support", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     await user.type(screen.getByLabelText("Message Nova"), "Show markdown");
     await user.click(screen.getByRole("button", { name: "Send" }));
@@ -307,12 +338,38 @@ Plain text remains plain.
     expect(screen.getByText("json")).toBeInTheDocument();
     expect(screen.getByText("rust")).toBeInTheDocument();
     expect(screen.getByText("text")).toBeInTheDocument();
-    expect(screen.getAllByRole("button", { name: "Copy code" })).toHaveLength(5);
+    const copyButtons = screen.getAllByRole("button", { name: "Copy code" });
+    expect(copyButtons).toHaveLength(5);
+
+  });
+
+  it("adds one UTF-8 text attachment to the submitted message context", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+    const attachmentContent = "# Notes\n\nUse this context.";
+    const attachment = new File([attachmentContent], "notes.md", { type: "text/markdown" });
+    Object.defineProperty(attachment, "text", {
+      configurable: true,
+      value: () => Promise.resolve(attachmentContent)
+    });
+
+    await user.upload(screen.getByLabelText("Attach text or code file", { selector: "input" }), attachment);
+    expect(await screen.findByText("notes.md")).toBeInTheDocument();
+
+    await user.type(screen.getByLabelText("Message Nova"), "Summarize this{enter}");
+    const request = invokeMock.mock.calls.find(([command]) => command === "start_streaming_message")?.[1] as {
+      request: { message: string; model: string; streamId: string };
+    };
+
+    expect(request.request.message).toContain("Summarize this");
+    expect(request.request.message).toContain("Attached text file: notes.md");
+    expect(request.request.message).toContain("# Notes");
+    expect(request.request.message).toContain("Use this context.");
   });
 
   it("clears the current conversation with confirmation", async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await renderApp();
 
     await user.type(screen.getByLabelText("Message Nova"), "Clear this later");
     await user.click(screen.getByRole("button", { name: "Send" }));
