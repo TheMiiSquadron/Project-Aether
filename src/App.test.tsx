@@ -147,20 +147,20 @@ describe("App shell", () => {
             {
               id: "message-1",
               conversationId: "active-conversation",
-              role: "User",
+              role: "user",
               content: "Remember this?",
               createdAt: "2026-07-15T02:00:00Z",
-              status: "Complete",
+              status: "complete",
               position: 0,
               metadataJson: "{}"
             },
             {
               id: "message-2",
               conversationId: "active-conversation",
-              role: "Assistant",
+              role: "assistant",
               content: "Yes, this loaded from storage.",
               createdAt: "2026-07-15T02:01:00Z",
-              status: "Complete",
+              status: "complete",
               position: 1,
               metadataJson: "{}"
             }
@@ -198,7 +198,7 @@ describe("App shell", () => {
         "Persist this",
         "Saved response."
       ]);
-      expect(payload.conversation.messages[1].status).toBe("Complete");
+      expect(payload.conversation.messages[1].status).toBe("complete");
     });
   });
 

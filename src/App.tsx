@@ -94,10 +94,10 @@ type StoredConversation = {
 type StoredMessage = {
   id: string;
   conversationId: string;
-  role: "System" | "User" | "Assistant";
+  role: "system" | "user" | "assistant";
   content: string;
   createdAt: string;
-  status: "Complete" | "Streaming" | "Cancelled" | "Failed" | "Partial";
+  status: "complete" | "streaming" | "cancelled" | "failed" | "partial";
   position: number;
   metadataJson: string;
 };
@@ -848,7 +848,7 @@ function normalizeStorageError(error: unknown): ProviderErrorPayload {
 function mapStoredMessageToConversationMessage(message: StoredMessage): ConversationMessage {
   return {
     id: message.id,
-    role: message.role === "User" ? "user" : "assistant",
+    role: message.role === "user" ? "user" : "assistant",
     content: message.content,
     status: mapStoredStatusToConversationStatus(message.status),
     attachmentName: readAttachmentName(message.metadataJson),
@@ -857,10 +857,10 @@ function mapStoredMessageToConversationMessage(message: StoredMessage): Conversa
 }
 
 function mapStoredStatusToConversationStatus(status: StoredMessage["status"]): ConversationMessage["status"] {
-  if (status === "Cancelled") {
+  if (status === "cancelled") {
     return "cancelled";
   }
-  if (status === "Failed") {
+  if (status === "failed") {
     return "error";
   }
   return "complete";
@@ -868,15 +868,15 @@ function mapStoredStatusToConversationStatus(status: StoredMessage["status"]): C
 
 function mapConversationStatusToStoredStatus(status: ConversationMessage["status"]): StoredMessage["status"] {
   if (status === "cancelled") {
-    return "Cancelled";
+    return "cancelled";
   }
   if (status === "error") {
-    return "Failed";
+    return "failed";
   }
   if (status === "generating") {
-    return "Partial";
+    return "partial";
   }
-  return "Complete";
+  return "complete";
 }
 
 function buildStoredConversation(
@@ -899,7 +899,7 @@ function buildStoredConversation(
     messages: conversation.map((message, index) => ({
       id: message.id,
       conversationId: id,
-      role: message.role === "user" ? "User" : "Assistant",
+      role: message.role === "user" ? "user" : "assistant",
       content: message.content,
       createdAt: message.createdAt,
       status: mapConversationStatusToStoredStatus(message.status),
