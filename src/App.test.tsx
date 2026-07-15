@@ -202,6 +202,17 @@ describe("App shell", () => {
     });
   });
 
+
+  it("opens the conversation actions menu from the header", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+
+    expect(screen.getByRole("menu", { name: "Conversation actions" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Clear current conversation" })).toBeDisabled();
+  });
+
   it("renders Nova's empty state", async () => {
     await renderApp();
 
@@ -481,7 +492,8 @@ Plain text remains plain.
 
     expect(await screen.findByText("Ready to clear.")).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Clear conversation" }));
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Clear current conversation" }));
 
     expect(window.confirm).toHaveBeenCalled();
     expect(invokeMock).toHaveBeenCalledWith("clear_active_conversation");

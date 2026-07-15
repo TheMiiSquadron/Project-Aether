@@ -179,6 +179,7 @@ export function App() {
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [providerStatus, setProviderStatus] = useState<"ready" | "connecting" | "offline">("connecting");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentContext | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -496,6 +497,7 @@ export function App() {
     }
 
     setConversation([]);
+    setConversationMenuOpen(false);
     activeConversationIdRef.current = null;
     activeConversationCreatedAtRef.current = null;
     void invoke("clear_active_conversation").catch((caughtError) => {
@@ -600,15 +602,30 @@ export function App() {
           <button className="icon-button" type="button" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
             <Settings size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
-          <button
-            className="icon-button"
-            type="button"
-            aria-label="Clear conversation"
-            disabled={!conversation.length || isGenerating}
-            onClick={handleClearConversation}
-          >
-            <MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" />
-          </button>
+          <div className="conversation-menu-wrap">
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Conversation actions"
+              aria-expanded={conversationMenuOpen}
+              onClick={() => setConversationMenuOpen((open) => !open)}
+            >
+              <MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" />
+            </button>
+            {conversationMenuOpen ? (
+              <div className="conversation-menu" role="menu" aria-label="Conversation actions">
+                <button
+                  className="conversation-menu__item conversation-menu__item--danger"
+                  type="button"
+                  role="menuitem"
+                  disabled={!conversation.length || isGenerating}
+                  onClick={handleClearConversation}
+                >
+                  Clear current conversation
+                </button>
+              </div>
+            ) : null}
+          </div>
         </div>
       </header>
 
