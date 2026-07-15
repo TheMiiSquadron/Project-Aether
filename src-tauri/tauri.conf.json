@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.alexmarkham.aether",
   "build": {
-    "beforeDevCommand": "npm run dev",
+    "beforeDevCommand": "npm.cmd run dev",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeBuildCommand": "npm run build",
+    "beforeBuildCommand": "npm.cmd run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -29,6 +29,12 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "icon": []
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
   }
 }
