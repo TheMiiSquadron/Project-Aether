@@ -29,6 +29,23 @@ const languageKeywords: Record<string, string[]> = {
   yml: ["true", "false", "null"]
 };
 
+const languageLabels: Record<string, string> = {
+  md: "markdown",
+  markdown: "markdown",
+  json: "json",
+  rust: "rust",
+  rs: "rust",
+  py: "python",
+  python: "python",
+  toml: "toml",
+  yaml: "yaml",
+  yml: "yaml",
+  ts: "typescript",
+  tsx: "typescript",
+  js: "javascript",
+  jsx: "javascript"
+};
+
 export function MarkdownMessage({ content }: MarkdownMessageProps) {
   const blocks = useMemo(() => parseMarkdown(content), [content]);
 
@@ -98,7 +115,8 @@ function MarkdownBlock({ block }: { block: Block }) {
 
 function CodeBlock({ block }: { block: Extract<Block, { type: "code" }> }) {
   const [copied, setCopied] = useState(false);
-  const language = block.language || "text";
+  const language = block.language;
+  const label = getLanguageLabel(language);
 
   const handleCopy = async () => {
     await navigator.clipboard.writeText(block.content);
@@ -109,7 +127,7 @@ function CodeBlock({ block }: { block: Extract<Block, { type: "code" }> }) {
   return (
     <figure className="code-block">
       <figcaption>
-        <span>{language}</span>
+        <span className="code-language">{label}</span>
         <button type="button" onClick={handleCopy} aria-label="Copy code">
           {copied ? <Check size={15} aria-hidden="true" /> : <Clipboard size={15} aria-hidden="true" />}
           <span>{copied ? "Copied" : "Copy"}</span>
@@ -137,7 +155,7 @@ function parseMarkdown(content: string): Block[] {
 
     const codeMatch = line.match(/^```([\w-]*)\s*$/);
     if (codeMatch) {
-      const language = codeMatch[1] || "text";
+      const language = normalizeLanguage(codeMatch[1]);
       const codeLines: string[] = [];
       index += 1;
       while (index < lines.length && !lines[index].startsWith("```")) {
@@ -304,4 +322,16 @@ function highlightCode(content: string, language: string) {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function normalizeLanguage(language: string | undefined) {
+  return language?.trim().toLowerCase() ?? "";
+}
+
+function getLanguageLabel(language: string) {
+  if (!language) {
+    return "text";
+  }
+
+  return languageLabels[language] ?? language;
 }

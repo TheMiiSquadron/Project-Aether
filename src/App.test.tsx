@@ -269,6 +269,26 @@ const name = "Nova";
 function greet() {
   return name;
 }
+\`\`\`
+
+\`\`\`markdown
+# Generated Markdown
+
+- Copyable source
+\`\`\`
+
+\`\`\`json
+{ "name": "Nova" }
+\`\`\`
+
+\`\`\`rust
+fn main() {
+  println!("Nova");
+}
+\`\`\`
+
+\`\`\`
+Plain text remains plain.
 \`\`\``
       }
     });
@@ -282,8 +302,12 @@ function greet() {
     expect(screen.getByText("Ordered two")).toBeInTheDocument();
     expect(screen.getByText("Quoted content should stand apart.")).toBeInTheDocument();
     expect(screen.getByRole("cell", { name: "Assistant" })).toBeInTheDocument();
-    expect(await screen.findByText("ts")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
+    expect(await screen.findByText("typescript")).toBeInTheDocument();
+    expect(screen.getByText("markdown")).toBeInTheDocument();
+    expect(screen.getByText("json")).toBeInTheDocument();
+    expect(screen.getByText("rust")).toBeInTheDocument();
+    expect(screen.getByText("text")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Copy code" })).toHaveLength(5);
   });
 
   it("clears the current conversation with confirmation", async () => {

@@ -806,17 +806,34 @@ textarea::placeholder {
   align-items: center;
   justify-content: space-between;
   gap: 0.75rem;
-  padding: 0.58rem 0.68rem 0.58rem 0.9rem;
+  min-height: 2.35rem;
+  padding: 0.5rem 0.62rem 0.5rem 0.78rem;
   border-bottom: 1px solid var(--code-border);
   color: var(--muted-text);
   font-size: 0.76rem;
   font-weight: 760;
-  letter-spacing: 0.01em;
+}
+
+.code-language {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  max-width: 12rem;
+  overflow: hidden;
+  padding: 0.2rem 0.46rem;
+  border: 1px solid var(--code-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--code-background) 74%, transparent);
+  color: var(--secondary-text);
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .code-block figcaption button {
   display: inline-flex;
   align-items: center;
+  flex: 0 0 auto;
   gap: 0.32rem;
   padding: 0.26rem 0.48rem;
   border: 1px solid var(--control-border);
@@ -831,13 +848,13 @@ textarea::placeholder {
   max-width: 100%;
   margin: 0;
   overflow-x: auto;
-  padding: 1rem 1.08rem;
+  padding: 0.9rem 1rem;
 }
 
 .code-block code {
   font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
-  font-size: 0.91em;
-  line-height: 1.66;
+  font-size: 0.84em;
+  line-height: 1.62;
   white-space: pre;
 }
 
