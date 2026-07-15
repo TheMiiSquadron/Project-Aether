@@ -267,6 +267,15 @@ mod tests {
                 Err(error) => Err(error.clone()),
             }
         }
+
+        async fn list_models(
+            &self,
+        ) -> Result<Vec<crate::model_provider::AvailableModel>, ProviderError> {
+            Ok(vec![crate::model_provider::AvailableModel {
+                name: DEFAULT_MODEL_NAME.to_string(),
+                provider: "Ollama".to_string(),
+            }])
+        }
     }
 
     #[tokio::test]

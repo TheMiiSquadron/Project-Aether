@@ -2,7 +2,7 @@
 
 Status: Planning  
 Version: Draft 0.1  
-Last Updated: 2026-07-14
+Last Updated: 2026-07-15
 
 ## Version Roadmap
 
@@ -66,6 +66,8 @@ Nova can hold a reliable, streaming conversation using a local AI model.
 
 These milestones complete `v0.1 — First Conversation` as a polished local chat application. They should be implemented in order and should not expand v0.1 into conversation history, memory, general tools, Portal integration, agents, automation, or other future roadmap features.
 
+**Implementation status:** complete on the macOS/Orion path. Windows validation remains pending until NOVA is available.
+
 #### 1. Markdown Rendering
 
 * Headers
@@ -119,11 +121,11 @@ These milestones complete `v0.1 — First Conversation` as a polished local chat
 
 Before tagging `v0.1.0`, confirm:
 
-* All frozen v0.1 features implemented
-* Tests passing
-* No known major bugs
-* Documentation current
-* Reproducible macOS build
-* Windows build validated when NOVA is available
-* Release notes prepared
-* Git tag created for v0.1.0
+* [x] All frozen v0.1 features implemented
+* [x] Tests passing
+* [x] No known major bugs
+* [x] Documentation current
+* [x] Reproducible macOS build
+* [ ] Windows build validated when NOVA is available
+* [x] Release notes prepared
+* [ ] Git tag created for v0.1.0

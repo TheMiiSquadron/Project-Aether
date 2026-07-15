@@ -1,19 +1,42 @@
 mod conversation;
 mod model_provider;
 mod ollama;
+mod settings;
 mod shell;
 
 use conversation::{
     ActiveStreams, CancelStreamRequest, CancelStreamResponse, StartStreamResponse,
     SubmitMessageRequest, SubmitMessageResponse,
 };
-use model_provider::ProviderErrorPayload;
+use model_provider::{AvailableModel, ProviderErrorPayload};
+use settings::AppSettings;
 pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PROMPT};
 use tauri::{AppHandle, State};
 
 #[tauri::command]
 fn shell_metadata() -> ShellMetadata {
     ShellMetadata::default()
+}
+
+#[tauri::command]
+async fn list_models() -> Result<Vec<AvailableModel>, ProviderErrorPayload> {
+    use crate::model_provider::ModelProvider;
+
+    let provider = ollama::OllamaProvider::local();
+    provider
+        .list_models()
+        .await
+        .map_err(ProviderErrorPayload::from)
+}
+
+#[tauri::command]
+fn load_settings(app: AppHandle) -> Result<AppSettings, String> {
+    settings::load_settings(app)
+}
+
+#[tauri::command]
+fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, String> {
+    settings::save_settings(app, settings)
 }
 
 #[tauri::command]
@@ -46,6 +69,9 @@ pub fn run() {
         .manage(ActiveStreams::default())
         .invoke_handler(tauri::generate_handler![
             shell_metadata,
+            list_models,
+            load_settings,
+            save_settings,
             submit_message,
             start_streaming_message,
             cancel_streaming_message

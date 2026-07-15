@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: streaming Ollama conversation path implemented with Nova identity prompt
+Status: v0.1 local chat implementation complete on the macOS/Orion path; Windows validation remains pending until NOVA is available.
 
 ## Development
 
@@ -26,12 +26,14 @@ Run the Tauri desktop app:
 npm run tauri -- dev
 ```
 
-Validate the scaffold:
+Validate the app:
 
 ```sh
 npm test
 npm run build
 cd src-tauri && cargo test
+cd src-tauri && cargo fmt --check
+npm run tauri -- build
 ```
 
 The current implementation uses the frozen v0.1 streaming request path:
@@ -40,11 +42,13 @@ The current implementation uses the frozen v0.1 streaming request path:
 UI -> Conversation Engine -> Model Provider -> Ollama provider
 ```
 
-For the first local conversation milestone, the selected static model is `llama3.2:latest`.
+For v0.1, Aether discovers installed Ollama models and lets the active model be selected from the compact model/status control.
 
 Nova's initial identity is defined in [prompts/nova-system-prompt.md](prompts/nova-system-prompt.md). The Conversation Engine prepends that prompt to new requests before sending them through the Model Provider.
 
 Streaming responses are delivered from Rust to the React UI as normalized conversation stream events: started, chunk, completed, cancelled, and failed. The UI updates the active assistant message incrementally and lets the Send button become Stop during generation.
+
+The v0.1 app includes Markdown rendering, code blocks with copy actions, user-initiated text/code attachments, persisted settings, friendly provider errors, and the frozen Nova conversation shell.
 
 ## Documentation
 
@@ -63,5 +67,6 @@ Streaming responses are delivered from Rust to the React UI as normalized conver
 * [UI Design](docs/11-UI-Design.md)
 * [Settings Design — v0.1](docs/12-Settings-Design-v0.1.md)
 * [Architecture Freeze Review v0.1](docs/Architecture-Freeze-Review-v0.1.md)
+* [Release Notes v0.1.0](docs/Release-Notes-v0.1.0.md)
 
 The original living design document has been split into focused documentation files. Existing links can still start from [Project Aether - 'Nova' AI.md](Project%20Aether%20-%20'Nova'%20AI.md).

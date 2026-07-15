@@ -22,6 +22,13 @@ pub struct ConversationResponse {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct AvailableModel {
+    pub name: String,
+    pub provider: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ProviderErrorPayload {
     pub kind: ProviderErrorKind,
     pub message: String,
@@ -34,6 +41,7 @@ pub struct ProviderErrorPayload {
 pub enum ProviderErrorKind {
     OllamaUnavailable,
     ModelMissing,
+    Timeout,
     RequestFailed,
     EmptyResponse,
     Cancelled,
@@ -73,6 +81,16 @@ impl ProviderError {
             kind: ProviderErrorKind::RequestFailed,
             message: "Nova could not complete the request.".to_string(),
             action: "Try again. If the problem continues, check Ollama and the selected model."
+                .to_string(),
+            diagnostics: Some(diagnostics.into()),
+        }
+    }
+
+    pub fn timeout(diagnostics: impl Into<String>) -> Self {
+        Self {
+            kind: ProviderErrorKind::Timeout,
+            message: "Nova's request timed out.".to_string(),
+            action: "Try again, or choose a smaller local model if the problem continues."
                 .to_string(),
             diagnostics: Some(diagnostics.into()),
         }
@@ -163,6 +181,8 @@ pub trait ModelProvider {
         cancellation: CancellationToken,
         on_event: StreamEventHandler,
     ) -> Result<(), ProviderError>;
+
+    async fn list_models(&self) -> Result<Vec<AvailableModel>, ProviderError>;
 }
 
 pub type StreamEventHandler = Arc<dyn Fn(ProviderStreamEvent) + Send + Sync>;

@@ -8,21 +8,24 @@ use reqwest::StatusCode;
 use serde::{Deserialize, Serialize};
 
 const OLLAMA_GENERATE_URL: &str = "http://127.0.0.1:11434/api/generate";
+const OLLAMA_TAGS_URL: &str = "http://127.0.0.1:11434/api/tags";
 
 pub struct OllamaProvider {
     client: reqwest::Client,
     generate_url: String,
+    tags_url: String,
 }
 
 impl OllamaProvider {
     pub fn local() -> Self {
-        Self::new(OLLAMA_GENERATE_URL)
+        Self::new(OLLAMA_GENERATE_URL, OLLAMA_TAGS_URL)
     }
 
-    pub fn new(generate_url: impl Into<String>) -> Self {
+    pub fn new(generate_url: impl Into<String>, tags_url: impl Into<String>) -> Self {
         Self {
             client: reqwest::Client::new(),
             generate_url: generate_url.into(),
+            tags_url: tags_url.into(),
         }
     }
 }
@@ -51,6 +54,33 @@ struct OllamaErrorResponse {
     error: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct OllamaTagsResponse {
+    models: Vec<OllamaTagModel>,
+}
+
+#[derive(Debug, Deserialize)]
+struct OllamaTagModel {
+    name: String,
+}
+
+fn normalize_ollama_transport_error(error: reqwest::Error) -> ProviderError {
+    if error.is_timeout() {
+        ProviderError::timeout(error.to_string())
+    } else {
+        ProviderError::ollama_unavailable(error.to_string())
+    }
+}
+
+fn normalize_ollama_api_error(model: &str, detail: String) -> ProviderError {
+    let lower_detail = detail.to_lowercase();
+    if lower_detail.contains("model") && lower_detail.contains("not found") {
+        ProviderError::model_missing(model)
+    } else {
+        ProviderError::request_failed(detail)
+    }
+}
+
 fn normalize_ollama_stream_line(line: &str) -> Result<Option<ProviderStreamEvent>, ProviderError> {
     if line.trim().is_empty() {
         return Ok(None);
@@ -60,7 +90,7 @@ fn normalize_ollama_stream_line(line: &str) -> Result<Option<ProviderStreamEvent
         .map_err(|error| ProviderError::request_failed(error.to_string()))?;
 
     if let Some(error) = payload.error {
-        return Err(ProviderError::request_failed(error));
+        return Err(normalize_ollama_api_error("", error));
     }
 
     if let Some(response) = payload.response.filter(|response| !response.is_empty()) {
@@ -92,7 +122,7 @@ impl ModelProvider for OllamaProvider {
             .json(&ollama_request)
             .send()
             .await
-            .map_err(|error| ProviderError::ollama_unavailable(error.to_string()))?;
+            .map_err(normalize_ollama_transport_error)?;
 
         if response.status() == StatusCode::NOT_FOUND {
             return Err(ProviderError::model_missing(&request.model));
@@ -106,7 +136,7 @@ impl ModelProvider for OllamaProvider {
                 .ok()
                 .and_then(|payload| payload.error)
                 .unwrap_or_else(|| format!("Ollama returned HTTP {status}."));
-            return Err(ProviderError::request_failed(detail));
+            return Err(normalize_ollama_api_error(&request.model, detail));
         }
 
         let body = response
@@ -143,7 +173,7 @@ impl ModelProvider for OllamaProvider {
             .json(&ollama_request)
             .send()
             .await
-            .map_err(|error| ProviderError::ollama_unavailable(error.to_string()))?;
+            .map_err(normalize_ollama_transport_error)?;
 
         if response.status() == StatusCode::NOT_FOUND {
             return Err(ProviderError::model_missing(&request.model));
@@ -157,7 +187,7 @@ impl ModelProvider for OllamaProvider {
                 .ok()
                 .and_then(|payload| payload.error)
                 .unwrap_or_else(|| format!("Ollama returned HTTP {status}."));
-            return Err(ProviderError::request_failed(detail));
+            return Err(normalize_ollama_api_error(&request.model, detail));
         }
 
         on_event(ProviderStreamEvent::Started {
@@ -213,6 +243,38 @@ impl ModelProvider for OllamaProvider {
 
         Ok(())
     }
+
+    async fn list_models(
+        &self,
+    ) -> Result<Vec<crate::model_provider::AvailableModel>, ProviderError> {
+        let response = self
+            .client
+            .get(&self.tags_url)
+            .send()
+            .await
+            .map_err(normalize_ollama_transport_error)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            return Err(ProviderError::request_failed(format!(
+                "Ollama returned HTTP {status} while listing models."
+            )));
+        }
+
+        let body = response
+            .json::<OllamaTagsResponse>()
+            .await
+            .map_err(|error| ProviderError::request_failed(error.to_string()))?;
+
+        Ok(body
+            .models
+            .into_iter()
+            .map(|model| crate::model_provider::AvailableModel {
+                name: model.name,
+                provider: "Ollama".to_string(),
+            })
+            .collect())
+    }
 }
 
 #[cfg(test)]
@@ -245,7 +307,10 @@ mod tests {
         let error = normalize_ollama_stream_line(r#"{"error":"model not found"}"#)
             .expect_err("ollama error line fails");
 
-        assert!(error.message.contains("could not complete"));
-        assert_eq!(error.diagnostics, Some("model not found".to_string()));
+        assert!(error.message.contains("could not find"));
+        assert_eq!(
+            error.kind,
+            crate::model_provider::ProviderErrorKind::ModelMissing
+        );
     }
 }

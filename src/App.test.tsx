@@ -52,8 +52,28 @@ function latestStreamId() {
 
 describe("App shell", () => {
   beforeEach(() => {
+    vi.restoreAllMocks();
     invokeMock.mockReset();
     invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+
+      if (command === "save_settings") {
+        return Promise.resolve(args);
+      }
+
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+
       if (command === "start_streaming_message") {
         const request = args as { request: { streamId: string } };
         return Promise.resolve({ streamId: request.request.streamId });
@@ -72,6 +92,7 @@ describe("App shell", () => {
       streamListener = handler as (event: { payload: ConversationStreamPayload }) => void;
       return Promise.resolve(() => undefined);
     });
+    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   it("renders Nova's empty state", () => {
@@ -201,17 +222,64 @@ describe("App shell", () => {
     expect(screen.getByLabelText("Message Nova")).toBeEnabled();
   });
 
-  it("offers temporary visual theme presets", async () => {
+  it("persists visual theme preferences from settings", async () => {
     const user = userEvent.setup();
     render(<App />);
 
     const shell = screen.getByLabelText("Aether");
-    const themeSelector = screen.getByLabelText("Experimental theme");
 
     expect(shell).toHaveAttribute("data-theme", "crimson");
 
-    await user.selectOptions(themeSelector, "observatory");
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.selectOptions(screen.getByLabelText("Theme"), "observatory");
 
     expect(shell).toHaveAttribute("data-theme", "observatory");
+  });
+
+  it("renders Markdown code blocks with a copy action", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText("Message Nova"), "Show code");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const streamId = latestStreamId();
+
+    emitStream({
+      streamId,
+      event: { type: "chunk", content: "```ts\nconst name = \"Nova\";\n```" }
+    });
+    emitStream({
+      streamId,
+      event: { type: "completed", model: "llama3.2:latest" }
+    });
+
+    expect(await screen.findByText("ts")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
+  });
+
+  it("clears the current conversation with confirmation", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.type(screen.getByLabelText("Message Nova"), "Clear this later");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const streamId = latestStreamId();
+
+    emitStream({
+      streamId,
+      event: { type: "chunk", content: "Ready to clear." }
+    });
+    emitStream({
+      streamId,
+      event: { type: "completed", model: "llama3.2:latest" }
+    });
+
+    expect(await screen.findByText("Ready to clear.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Clear conversation" }));
+
+    expect(window.confirm).toHaveBeenCalled();
+    expect(screen.queryByText("Ready to clear.")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
   });
 });

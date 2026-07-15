@@ -1,9 +1,21 @@
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { CSSProperties, ChangeEvent, FormEvent, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { ChevronDown, Paperclip, Send, Settings, Square } from "lucide-react";
+import {
+  ChevronDown,
+  Clipboard,
+  FileText,
+  MoreHorizontal,
+  Paperclip,
+  RefreshCw,
+  Send,
+  Settings,
+  Square,
+  X
+} from "lucide-react";
+import { MarkdownMessage } from "./MarkdownMessage";
 
-const placeholderModel = {
+const defaultModel = {
   name: "llama3.2:latest",
   status: "Ready"
 };
@@ -14,13 +26,58 @@ const appearancePresets = [
   { id: "observatory", label: "Observatory" }
 ] as const;
 
+const composerStyles = [
+  { id: "rounded", label: "Rounded" },
+  { id: "subtle", label: "Subtle" },
+  { id: "square", label: "Square" }
+] as const;
+
+const supportedAttachmentExtensions = new Set([
+  ".txt",
+  ".md",
+  ".py",
+  ".rs",
+  ".ts",
+  ".tsx",
+  ".js",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".toml",
+  ".log"
+]);
+
+const maxAttachmentBytes = 1024 * 1024;
+
 type AppearancePreset = (typeof appearancePresets)[number]["id"];
+type ComposerStyle = (typeof composerStyles)[number]["id"];
+
+type AppSettings = {
+  theme: AppearancePreset;
+  selectedModel: string;
+  fontSize: number;
+  composerStyle: ComposerStyle;
+  showContextCounter: boolean;
+  developerMode: boolean;
+};
+
+type AvailableModel = {
+  name: string;
+  provider: string;
+};
+
+type AttachmentContext = {
+  name: string;
+  size: number;
+  content: string;
+};
 
 type ConversationMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   status?: "complete" | "generating" | "cancelled" | "error";
+  attachmentName?: string;
 };
 
 type StartStreamResponse = {
@@ -44,6 +101,15 @@ type ConversationStreamEvent =
 type ConversationStreamPayload = {
   streamId: string;
   event: ConversationStreamEvent;
+};
+
+const defaultSettings: AppSettings = {
+  theme: "crimson",
+  selectedModel: defaultModel.name,
+  fontSize: 16,
+  composerStyle: "subtle",
+  showContextCounter: false,
+  developerMode: false
 };
 
 type ComposerActionButtonProps = {
@@ -76,13 +142,21 @@ function ComposerActionButton({
 
 export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const conversationRegionRef = useRef<HTMLElement>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
   const activeStreamIdRef = useRef<string | null>(null);
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const shouldStickToBottomRef = useRef(true);
+  const settingsLoadedRef = useRef(false);
   const [message, setMessage] = useState("");
-  const [appearancePreset, setAppearancePreset] = useState<AppearancePreset>("crimson");
+  const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
+  const [providerStatus, setProviderStatus] = useState<"ready" | "connecting" | "offline">("connecting");
+  const [modelMenuOpen, setModelMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [attachment, setAttachment] = useState<AttachmentContext | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<ProviderErrorPayload | null>(null);
@@ -90,6 +164,33 @@ export function App() {
   useEffect(() => {
     composerRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    invoke<AppSettings>("load_settings")
+      .then((loadedSettings) => {
+        setSettings(normalizeSettings(loadedSettings));
+      })
+      .catch(() => {
+        setSettings(defaultSettings);
+      })
+      .finally(() => {
+        settingsLoadedRef.current = true;
+      });
+
+    void refreshModels();
+  }, []);
+
+  useEffect(() => {
+    if (!settingsLoadedRef.current) {
+      return;
+    }
+
+    const saveHandle = window.setTimeout(() => {
+      void invoke("save_settings", { settings });
+    }, 250);
+
+    return () => window.clearTimeout(saveHandle);
+  }, [settings]);
 
   useEffect(() => {
     let isMounted = true;
@@ -111,9 +212,37 @@ export function App() {
 
   useEffect(() => {
     if (shouldStickToBottomRef.current && threadEndRef.current?.scrollIntoView) {
-      threadEndRef.current.scrollIntoView({ block: "end" });
+      threadEndRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
     }
   }, [conversation]);
+
+  const selectedModel = settings.selectedModel || availableModels[0]?.name || defaultModel.name;
+  const selectedModelMissing =
+    availableModels.length > 0 && !availableModels.some((model) => model.name === selectedModel);
+  const contextCount = estimateContextCount(message, attachment);
+
+  async function refreshModels() {
+    setProviderStatus("connecting");
+    try {
+      const response = await invoke<AvailableModel[]>("list_models");
+      const models = Array.isArray(response) ? response : [];
+      setAvailableModels(models);
+      setProviderStatus("ready");
+      setSettings((current) => {
+        if (current.selectedModel && models.some((model) => model.name === current.selectedModel)) {
+          return current;
+        }
+
+        return {
+          ...current,
+          selectedModel: models[0]?.name ?? current.selectedModel
+        };
+      });
+    } catch (caughtError) {
+      setProviderStatus("offline");
+      setError(normalizeProviderError(caughtError));
+    }
+  }
 
   const finishGeneration = () => {
     activeStreamIdRef.current = null;
@@ -202,15 +331,18 @@ export function App() {
     event.preventDefault();
     const trimmedMessage = message.trim();
 
-    if (!trimmedMessage || isGenerating) {
+    if ((!trimmedMessage && !attachment) || isGenerating) {
       return;
     }
 
+    const messageForProvider = buildMessageForProvider(trimmedMessage, attachment);
+    const userDisplayContent = trimmedMessage || `Please review ${attachment?.name}.`;
     const userMessage: ConversationMessage = {
       id: crypto.randomUUID(),
       role: "user",
-      content: trimmedMessage,
-      status: "complete"
+      content: userDisplayContent,
+      status: "complete",
+      attachmentName: attachment?.name
     };
     const pendingAssistantMessage: ConversationMessage = {
       id: crypto.randomUUID(),
@@ -224,6 +356,8 @@ export function App() {
     activeStreamIdRef.current = streamId;
     setConversation((current) => [...current, userMessage, pendingAssistantMessage]);
     setMessage("");
+    setAttachment(null);
+    setAttachmentError(null);
     setError(null);
     setIsGenerating(true);
     shouldStickToBottomRef.current = true;
@@ -231,8 +365,8 @@ export function App() {
     try {
       const result = await invoke<StartStreamResponse>("start_streaming_message", {
         request: {
-          message: trimmedMessage,
-          model: placeholderModel.name,
+          message: messageForProvider,
+          model: selectedModel,
           streamId
         }
       });
@@ -286,36 +420,124 @@ export function App() {
     shouldStickToBottomRef.current = distanceFromBottom < 80;
   };
 
+  const handleClearConversation = () => {
+    if (!conversation.length || isGenerating) {
+      return;
+    }
+
+    const shouldClear = window.confirm("Clear the current conversation?");
+    if (!shouldClear) {
+      return;
+    }
+
+    setConversation([]);
+    setError(null);
+    setAttachment(null);
+    setAttachmentError(null);
+    shouldStickToBottomRef.current = true;
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  };
+
+  const handleAttachmentChange = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+
+    if (!file) {
+      return;
+    }
+
+    const validationError = validateAttachment(file);
+    if (validationError) {
+      setAttachment(null);
+      setAttachmentError(validationError);
+      return;
+    }
+
+    try {
+      const content = await file.text();
+      setAttachment({ name: file.name, size: file.size, content });
+      setAttachmentError(null);
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+    } catch {
+      setAttachment(null);
+      setAttachmentError("Aether could not read that file. Try another UTF-8 text or code file.");
+    }
+  };
+
+  const copyResponse = async (content: string) => {
+    await navigator.clipboard.writeText(content);
+  };
+
   return (
-    <main className="aether-shell" data-theme={appearancePreset} aria-label="Aether">
+    <main
+      className="aether-shell"
+      data-theme={settings.theme}
+      data-composer-style={settings.composerStyle}
+      aria-label="Aether"
+      style={{ "--message-font-size": `${settings.fontSize}px` } as CSSProperties}
+    >
       <header className="app-header">
         <div className="identity" aria-label="Application identity">
           <span className="assistant-name">Nova</span>
         </div>
 
         <div className="header-actions" aria-label="Application controls">
-          <label className="theme-switcher" aria-label="Experimental theme selector">
-            <span>Theme</span>
-            <select
-              aria-label="Experimental theme"
-              value={appearancePreset}
-              onChange={(event) => setAppearancePreset(event.target.value as AppearancePreset)}
+          <div className="model-menu-wrap">
+            <button
+              className="model-status"
+              type="button"
+              aria-label={`Model ${selectedModel}, ${statusLabel(providerStatus)}`}
+              aria-expanded={modelMenuOpen}
+              onClick={() => setModelMenuOpen((open) => !open)}
             >
-              {appearancePresets.map((preset) => (
-                <option key={preset.id} value={preset.id}>
-                  {preset.label}
-                </option>
-              ))}
-            </select>
-          </label>
+              <span className={`status-dot status-dot--${providerStatus}`} aria-hidden="true" />
+              <span className="model-name">{selectedModel}</span>
+              <ChevronDown size={16} strokeWidth={1.8} aria-hidden="true" />
+            </button>
 
-          <button className="model-status" type="button" aria-label={`Model ${placeholderModel.name}, ${placeholderModel.status}`}>
-            <span className="status-dot" aria-hidden="true" />
-            <span className="model-name">{placeholderModel.name}</span>
-            <ChevronDown size={16} strokeWidth={1.8} aria-hidden="true" />
-          </button>
-          <button className="icon-button" type="button" aria-label="Settings">
+            {modelMenuOpen ? (
+              <div className="model-popover" role="menu">
+                <div className="model-popover__header">
+                  <span>Ollama Models</span>
+                  <button type="button" onClick={refreshModels} aria-label="Refresh installed models">
+                    <RefreshCw size={15} aria-hidden="true" />
+                  </button>
+                </div>
+                {availableModels.length ? (
+                  availableModels.map((model) => (
+                    <button
+                      className="model-option"
+                      type="button"
+                      role="menuitemradio"
+                      aria-checked={model.name === selectedModel}
+                      key={model.name}
+                      onClick={() => {
+                        setSettings((current) => ({ ...current, selectedModel: model.name }));
+                        setModelMenuOpen(false);
+                      }}
+                    >
+                      <span>{model.name}</span>
+                      <small>{model.provider}</small>
+                    </button>
+                  ))
+                ) : (
+                  <p className="model-empty">No local models found. Install one with Ollama, then refresh.</p>
+                )}
+              </div>
+            ) : null}
+          </div>
+
+          <button className="icon-button" type="button" aria-label="Settings" onClick={() => setSettingsOpen(true)}>
             <Settings size={18} strokeWidth={1.8} aria-hidden="true" />
+          </button>
+          <button
+            className="icon-button"
+            type="button"
+            aria-label="Clear conversation"
+            disabled={!conversation.length || isGenerating}
+            onClick={handleClearConversation}
+          >
+            <MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" />
           </button>
         </div>
       </header>
@@ -344,8 +566,30 @@ export function App() {
                   {conversationMessage.role === "user" ? "You" : "Nova"}
                 </div>
                 <div className={`message-card message-card--${conversationMessage.status ?? "complete"}`}>
-                  {conversationMessage.content ||
-                    (conversationMessage.status === "generating" ? "Nova is thinking..." : "")}
+                  {conversationMessage.attachmentName ? (
+                    <div className="attachment-chip">
+                      <FileText size={15} aria-hidden="true" />
+                      <span>{conversationMessage.attachmentName}</span>
+                    </div>
+                  ) : null}
+                  {conversationMessage.content ? (
+                    <MarkdownMessage content={conversationMessage.content} />
+                  ) : conversationMessage.status === "generating" ? (
+                    <span className="thinking-text">Nova is thinking...</span>
+                  ) : null}
+                  {conversationMessage.role === "assistant" &&
+                  conversationMessage.status === "complete" &&
+                  conversationMessage.content ? (
+                    <button
+                      className="message-copy"
+                      type="button"
+                      aria-label="Copy response"
+                      onClick={() => copyResponse(conversationMessage.content)}
+                    >
+                      <Clipboard size={14} aria-hidden="true" />
+                      <span>Copy</span>
+                    </button>
+                  ) : null}
                 </div>
               </article>
             ))}
@@ -354,6 +598,7 @@ export function App() {
               <div className="conversation-error" role="alert">
                 <strong>{error.message}</strong>
                 <span>{error.action}</span>
+                {settings.developerMode && error.diagnostics ? <code>{error.diagnostics}</code> : null}
               </div>
             ) : null}
             <div ref={threadEndRef} aria-hidden="true" />
@@ -362,34 +607,190 @@ export function App() {
       </section>
 
       <form className="composer" aria-label="Message composer" onSubmit={handleSubmit}>
-        <button className="composer-button" type="button" aria-label="Attach text or code file">
+        <input
+          ref={fileInputRef}
+          className="file-input"
+          type="file"
+          accept={Array.from(supportedAttachmentExtensions).join(",")}
+          onChange={handleAttachmentChange}
+          aria-label="Attach text or code file"
+        />
+        <button
+          className="composer-button"
+          type="button"
+          aria-label="Attach text or code file"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={isGenerating}
+        >
           <Paperclip size={19} strokeWidth={1.8} aria-hidden="true" />
         </button>
 
-        <textarea
-          ref={composerRef}
-          value={message}
-          onChange={(event) => setMessage(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              event.currentTarget.form?.requestSubmit();
-            }
-          }}
-          rows={1}
-          placeholder="Message Nova..."
-          aria-label="Message Nova"
-          disabled={isGenerating}
-        />
+        <div className="composer-input-stack">
+          {attachment ? (
+            <div className="composer-attachment">
+              <FileText size={15} aria-hidden="true" />
+              <span>{attachment.name}</span>
+              <button type="button" aria-label="Remove attachment" onClick={() => setAttachment(null)}>
+                <X size={14} aria-hidden="true" />
+              </button>
+            </div>
+          ) : null}
+          {attachmentError ? <div className="attachment-error">{attachmentError}</div> : null}
+          <textarea
+            ref={composerRef}
+            value={message}
+            onChange={(event) => setMessage(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" && !event.shiftKey) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
+            }}
+            rows={1}
+            placeholder="Message Nova..."
+            aria-label="Message Nova"
+            disabled={isGenerating}
+          />
+          {settings.showContextCounter ? (
+            <div className="context-counter" aria-label="Approximate context count">
+              ~{contextCount.toLocaleString()} tokens
+            </div>
+          ) : null}
+        </div>
 
         <ComposerActionButton
           isGenerating={isGenerating}
-          disabled={isGenerating ? false : !message.trim()}
+          disabled={isGenerating ? false : !message.trim() && !attachment}
           onStop={handleStopGeneration}
         />
       </form>
+
+      {settingsOpen ? (
+        <div className="settings-backdrop" role="presentation" onMouseDown={() => setSettingsOpen(false)}>
+          <section
+            className="settings-panel"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Aether settings"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header>
+              <div>
+                <h2>Settings</h2>
+                <p>v0.1 preferences only.</p>
+              </div>
+              <button type="button" className="icon-button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>
+                <X size={18} aria-hidden="true" />
+              </button>
+            </header>
+
+            <label>
+              <span>Theme</span>
+              <select
+                value={settings.theme}
+                onChange={(event) =>
+                  setSettings((current) => ({ ...current, theme: event.target.value as AppearancePreset }))
+                }
+              >
+                {appearancePresets.map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Font size</span>
+              <input
+                type="range"
+                min="14"
+                max="20"
+                value={settings.fontSize}
+                onChange={(event) =>
+                  setSettings((current) => ({ ...current, fontSize: Number(event.target.value) }))
+                }
+              />
+            </label>
+
+            <label>
+              <span>Composer style</span>
+              <select
+                value={settings.composerStyle}
+                onChange={(event) =>
+                  setSettings((current) => ({ ...current, composerStyle: event.target.value as ComposerStyle }))
+                }
+              >
+                {composerStyles.map((style) => (
+                  <option key={style.id} value={style.id}>
+                    {style.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={settings.showContextCounter}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    showContextCounter: event.target.checked
+                  }))
+                }
+              />
+              <span>Show approximate context counter</span>
+            </label>
+
+            <label className="settings-check">
+              <input
+                type="checkbox"
+                checked={settings.developerMode}
+                onChange={(event) =>
+                  setSettings((current) => ({ ...current, developerMode: event.target.checked }))
+                }
+              />
+              <span>Show developer diagnostics in errors</span>
+            </label>
+
+            {selectedModelMissing ? (
+              <p className="settings-warning">
+                The saved model is not currently installed. Choose an available Ollama model from the header.
+              </p>
+            ) : null}
+          </section>
+        </div>
+      ) : null}
     </main>
   );
+}
+
+function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
+  const theme: AppearancePreset = appearancePresets.some((preset) => preset.id === settings.theme)
+    ? (settings.theme as AppearancePreset)
+    : defaultSettings.theme;
+  const composerStyle: ComposerStyle = composerStyles.some((style) => style.id === settings.composerStyle)
+    ? (settings.composerStyle as ComposerStyle)
+    : defaultSettings.composerStyle;
+
+  return {
+    ...defaultSettings,
+    ...settings,
+    theme,
+    composerStyle,
+    fontSize: Math.min(Math.max(settings.fontSize ?? defaultSettings.fontSize, 14), 20)
+  };
+}
+
+function statusLabel(status: "ready" | "connecting" | "offline") {
+  if (status === "ready") {
+    return "Ready";
+  }
+  if (status === "connecting") {
+    return "Connecting";
+  }
+  return "Offline";
 }
 
 function normalizeProviderError(error: unknown): ProviderErrorPayload {
@@ -403,4 +804,37 @@ function normalizeProviderError(error: unknown): ProviderErrorPayload {
     action: "Try again. If the problem continues, check Ollama and the selected model.",
     diagnostics: error instanceof Error ? error.message : String(error)
   };
+}
+
+function buildMessageForProvider(message: string, attachment: AttachmentContext | null) {
+  if (!attachment) {
+    return message;
+  }
+
+  return `${message || "Please review the attached file."}
+
+Attached text file: ${attachment.name}
+
+\`\`\`
+${attachment.content}
+\`\`\``;
+}
+
+function validateAttachment(file: File) {
+  const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
+
+  if (!supportedAttachmentExtensions.has(extension)) {
+    return "Aether v0.1 only accepts UTF-8 text and code files.";
+  }
+
+  if (file.size > maxAttachmentBytes) {
+    return "Aether v0.1 accepts one text/code file up to 1 MB.";
+  }
+
+  return null;
+}
+
+function estimateContextCount(message: string, attachment: AttachmentContext | null) {
+  const characters = message.length + (attachment?.content.length ?? 0);
+  return Math.max(0, Math.ceil(characters / 4));
 }
