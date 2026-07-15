@@ -98,11 +98,58 @@ fn nova_system_prompt() -> &'static str {
     NOVA_SYSTEM_PROMPT.trim()
 }
 
+fn generated_file_language_hint(user_message: &str) -> Option<&'static str> {
+    let lower_message = user_message.to_lowercase();
+    let asks_for_generated_content = ["generate", "create", "write", "draft", "make"]
+        .iter()
+        .any(|verb| lower_message.contains(verb));
+
+    if !asks_for_generated_content {
+        return None;
+    }
+
+    let language = [
+        ("dockerfile", "dockerfile"),
+        ("readme.md", "markdown"),
+        ("changelog.md", "markdown"),
+        (".md", "markdown"),
+        (".json", "json"),
+        (".toml", "toml"),
+        (".yaml", "yaml"),
+        (".yml", "yaml"),
+        (".xml", "xml"),
+        (".rs", "rust"),
+        (".py", "python"),
+        (".ts", "typescript"),
+        (".tsx", "tsx"),
+        (".js", "javascript"),
+        (".jsx", "jsx"),
+        (".sh", "bash"),
+        (".bash", "bash"),
+        (".ps1", "powershell"),
+        (".html", "html"),
+        (".css", "css"),
+    ]
+    .iter()
+    .find_map(|(needle, language)| lower_message.contains(needle).then_some(*language));
+
+    language.or_else(|| lower_message.contains("license").then_some("text"))
+}
+
 fn build_prompt(user_message: &str) -> String {
+    let format_instruction = generated_file_language_hint(user_message)
+        .map(|language| {
+            format!(
+                "\n\nAssistant response requirements:\nThe user appears to be asking for generated file contents. Your first line must be exactly ```{language}. Return the complete file contents inside that single fenced code block. Do not use an unlabeled code fence or render the file as ordinary Markdown outside the code block."
+            )
+        })
+        .unwrap_or_default();
+
     format!(
-        "System:\n{}\n\nUser:\n{}",
+        "System:\n{}\n\nUser:\n{}{}",
         nova_system_prompt(),
-        user_message
+        user_message,
+        format_instruction
     )
 }
 
@@ -312,8 +359,85 @@ mod tests {
         assert!(request
             .message
             .contains("You are the AI assistant built into Project Aether."));
+        assert!(request
+            .message
+            .contains("When explicitly asked to generate the complete contents of a file"));
+        assert!(request
+            .message
+            .contains("return the file contents inside one appropriately fenced code block"));
+        assert!(request
+            .message
+            .contains("The opening fence must include the matching language identifier"));
+        assert!(request
+            .message
+            .contains("use `markdown` for Markdown files such as README.md"));
         assert!(request.message.contains("User:\nHello Nova"));
         assert!(!request.message.contains("  Hello Nova  "));
+    }
+
+    #[tokio::test]
+    async fn submit_adds_file_generation_format_hint_for_markdown_files() {
+        let provider = MockProvider {
+            request: Mutex::new(None),
+            result: Ok(ConversationResponse {
+                model: DEFAULT_MODEL_NAME.to_string(),
+                response: "```markdown\n# Widget Lab\n```".to_string(),
+            }),
+        };
+
+        submit_to_provider(
+            &provider,
+            SubmitMessageRequest {
+                message: "Generate a README.md for Widget Lab.".to_string(),
+                model: None,
+                stream_id: None,
+            },
+        )
+        .await
+        .expect("submit succeeds");
+
+        let request = provider
+            .request
+            .lock()
+            .expect("request lock")
+            .clone()
+            .expect("provider receives request");
+
+        assert!(request.message.contains("Assistant response requirements:"));
+        assert!(request
+            .message
+            .contains("Your first line must be exactly ```markdown"));
+    }
+
+    #[tokio::test]
+    async fn submit_does_not_add_file_generation_hint_for_explanations() {
+        let provider = MockProvider {
+            request: Mutex::new(None),
+            result: Ok(ConversationResponse {
+                model: DEFAULT_MODEL_NAME.to_string(),
+                response: "Markdown headings use hash symbols.".to_string(),
+            }),
+        };
+
+        submit_to_provider(
+            &provider,
+            SubmitMessageRequest {
+                message: "Explain Markdown headings in two short bullets.".to_string(),
+                model: None,
+                stream_id: None,
+            },
+        )
+        .await
+        .expect("submit succeeds");
+
+        let request = provider
+            .request
+            .lock()
+            .expect("request lock")
+            .clone()
+            .expect("provider receives request");
+
+        assert!(!request.message.contains("Assistant response requirements:"));
     }
 
     #[tokio::test]
