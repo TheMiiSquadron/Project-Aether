@@ -335,6 +335,19 @@ textarea:focus-visible {
   cursor: pointer;
 }
 
+.composer .composer-button {
+  align-self: center;
+  border-color: transparent;
+  background: transparent;
+  color: var(--secondary-text);
+}
+
+.composer .composer-button:hover {
+  border-color: var(--control-border);
+  background: var(--control-background);
+  color: var(--shell-text);
+}
+
 .conversation-region {
   display: grid;
   min-height: 0;
@@ -379,7 +392,15 @@ textarea:focus-visible {
   gap: 0.75rem;
   width: min(calc(100% - 2rem), 53rem);
   margin: 0 auto;
-  padding: 0.95rem 0 1.18rem;
+  padding: 0.58rem;
+  border: 1px solid var(--control-border);
+  border-radius: 18px;
+  background: var(--textarea-background);
+  box-shadow: 0 16px 42px rgba(0, 0, 0, 0.16);
+  transition:
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    background 160ms ease;
 }
 
 .composer::before {
@@ -394,25 +415,32 @@ textarea:focus-visible {
   pointer-events: none;
 }
 
+.composer:focus-within {
+  border-color: var(--control-hover-border);
+  box-shadow:
+    0 16px 42px rgba(0, 0, 0, 0.18),
+    0 0 0 2px var(--focus-ring);
+}
+
 textarea {
   min-height: 46px;
   max-height: 9.5rem;
-  padding: 0.82rem 0.95rem;
+  padding: 0.7rem 0.25rem;
   resize: none;
-  border: 1px solid var(--control-border);
-  border-radius: 16px;
-  background: var(--textarea-background);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--primary-text);
   font-size: var(--message-font-size, 16px);
   line-height: 1.42;
 }
 
-.aether-shell[data-composer-style="rounded"] textarea {
-  border-radius: 24px;
+.aether-shell[data-composer-style="rounded"] .composer {
+  border-radius: 28px;
 }
 
-.aether-shell[data-composer-style="square"] textarea {
-  border-radius: 8px;
+.aether-shell[data-composer-style="square"] .composer {
+  border-radius: 10px;
 }
 
 textarea:disabled {
@@ -422,6 +450,10 @@ textarea:disabled {
 
 textarea::placeholder {
   color: var(--placeholder-text);
+}
+
+textarea:focus-visible {
+  outline: 0;
 }
 
 .send-button {
@@ -461,6 +493,8 @@ textarea::placeholder {
 .composer-input-stack {
   display: grid;
   gap: 0.45rem;
+  align-self: center;
+  min-width: 0;
 }
 
 .composer-attachment,
