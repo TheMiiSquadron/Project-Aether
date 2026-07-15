@@ -264,6 +264,14 @@ impl ConversationStore {
         Ok(Some(conversation))
     }
 
+    pub fn delete_conversation(&self, id: &str) -> rusqlite::Result<bool> {
+        let deleted = self
+            .connection
+            .execute("DELETE FROM conversations WHERE id = ?1", params![id])?;
+
+        Ok(deleted > 0)
+    }
+
     pub fn list_conversations(&self) -> rusqlite::Result<Vec<ConversationSummary>> {
         let mut statement = self.connection.prepare(
             "
@@ -431,6 +439,26 @@ mod tests {
             .load_conversation("missing")
             .expect("lookup succeeds")
             .is_none());
+    }
+
+    #[test]
+    fn deletes_conversation_and_messages() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&sample_conversation())
+            .expect("conversation saves");
+
+        assert!(store
+            .delete_conversation("conversation-1")
+            .expect("conversation deletes"));
+        assert!(store
+            .load_conversation("conversation-1")
+            .expect("lookup succeeds")
+            .is_none());
+        assert!(store
+            .list_conversations()
+            .expect("summaries load")
+            .is_empty());
     }
 
     #[test]

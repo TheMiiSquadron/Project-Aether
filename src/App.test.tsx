@@ -86,6 +86,18 @@ describe("App shell", () => {
         ]);
       }
 
+      if (command === "load_active_conversation") {
+        return Promise.resolve(null);
+      }
+
+      if (command === "save_active_conversation") {
+        return Promise.resolve(undefined);
+      }
+
+      if (command === "clear_active_conversation") {
+        return Promise.resolve(undefined);
+      }
+
       if (command === "start_streaming_message") {
         const request = args as { request: { streamId: string } };
         return Promise.resolve({ streamId: request.request.streamId });
@@ -105,6 +117,89 @@ describe("App shell", () => {
       return Promise.resolve(() => undefined);
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
+  });
+
+
+  it("loads the saved active conversation on startup", async () => {
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "load_active_conversation") {
+        return Promise.resolve({
+          id: "active-conversation",
+          title: "Saved chat",
+          createdAt: "2026-07-15T02:00:00Z",
+          updatedAt: "2026-07-15T02:05:00Z",
+          activeModel: "llama3.2:latest",
+          metadataJson: "{}",
+          messages: [
+            {
+              id: "message-1",
+              conversationId: "active-conversation",
+              role: "User",
+              content: "Remember this?",
+              createdAt: "2026-07-15T02:00:00Z",
+              status: "Complete",
+              position: 0,
+              metadataJson: "{}"
+            },
+            {
+              id: "message-2",
+              conversationId: "active-conversation",
+              role: "Assistant",
+              content: "Yes, this loaded from storage.",
+              createdAt: "2026-07-15T02:01:00Z",
+              status: "Complete",
+              position: 1,
+              metadataJson: "{}"
+            }
+          ]
+        });
+      }
+      if (command === "save_settings" || command === "save_active_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText("Remember this?")).toBeInTheDocument();
+    expect(screen.getByText("Yes, this loaded from storage.")).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Hello, Alex." })).not.toBeInTheDocument();
+  });
+
+  it("saves the active conversation after Nova responds", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+
+    await user.type(screen.getByLabelText("Message Nova"), "Persist this{enter}");
+    const streamId = latestStreamId();
+    emitStream({ streamId, event: { type: "chunk", content: "Saved response." } });
+    emitStream({ streamId, event: { type: "completed", model: "llama3.2:latest" } });
+
+    await waitFor(() => {
+      const saveCall = invokeMock.mock.calls.find(([command]) => command === "save_active_conversation");
+      expect(saveCall).toBeTruthy();
+      const payload = saveCall?.[1] as { conversation: { title: string; messages: Array<{ content: string; status: string }> } };
+      expect(payload.conversation.title).toBe("Persist this");
+      expect(payload.conversation.messages.map((message) => message.content)).toEqual([
+        "Persist this",
+        "Saved response."
+      ]);
+      expect(payload.conversation.messages[1].status).toBe("Complete");
+    });
   });
 
   it("renders Nova's empty state", async () => {
@@ -389,6 +484,7 @@ Plain text remains plain.
     await user.click(screen.getByRole("button", { name: "Clear conversation" }));
 
     expect(window.confirm).toHaveBeenCalled();
+    expect(invokeMock).toHaveBeenCalledWith("clear_active_conversation");
     expect(screen.queryByText("Ready to clear.")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
   });

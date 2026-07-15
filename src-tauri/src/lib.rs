@@ -12,7 +12,30 @@ use conversation::{
 use model_provider::{AvailableModel, ProviderErrorPayload};
 use settings::AppSettings;
 pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PROMPT};
-use tauri::{AppHandle, State};
+use std::fs;
+use std::path::PathBuf;
+use storage::StoredConversation;
+use tauri::{AppHandle, Manager, State};
+
+const ACTIVE_CONVERSATION_ID: &str = "active-conversation";
+const CONVERSATION_DATABASE_FILE_NAME: &str = "conversations.sqlite";
+
+fn conversation_database_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not locate Aether conversation storage: {error}"))?;
+
+    fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("Could not create Aether conversation storage: {error}"))?;
+
+    Ok(data_dir.join(CONVERSATION_DATABASE_FILE_NAME))
+}
+
+fn open_conversation_store(app: &AppHandle) -> Result<storage::ConversationStore, String> {
+    storage::ConversationStore::open(conversation_database_path(app)?)
+        .map_err(|error| format!("Could not open Aether conversation storage: {error}"))
+}
 
 #[tauri::command]
 fn shell_metadata() -> ShellMetadata {
@@ -38,6 +61,40 @@ fn load_settings(app: AppHandle) -> Result<AppSettings, String> {
 #[tauri::command]
 fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, String> {
     settings::save_settings(app, settings)
+}
+
+#[tauri::command]
+fn load_active_conversation(app: AppHandle) -> Result<Option<StoredConversation>, String> {
+    let store = open_conversation_store(&app)?;
+    store
+        .load_conversation(ACTIVE_CONVERSATION_ID)
+        .map_err(|error| format!("Could not load Aether conversation: {error}"))
+}
+
+#[tauri::command]
+fn save_active_conversation(
+    app: AppHandle,
+    conversation: StoredConversation,
+) -> Result<(), String> {
+    let mut conversation = conversation;
+    conversation.id = ACTIVE_CONVERSATION_ID.to_string();
+    for message in &mut conversation.messages {
+        message.conversation_id = ACTIVE_CONVERSATION_ID.to_string();
+    }
+
+    let mut store = open_conversation_store(&app)?;
+    store
+        .save_conversation(&conversation)
+        .map_err(|error| format!("Could not save Aether conversation: {error}"))
+}
+
+#[tauri::command]
+fn clear_active_conversation(app: AppHandle) -> Result<(), String> {
+    let store = open_conversation_store(&app)?;
+    store
+        .delete_conversation(ACTIVE_CONVERSATION_ID)
+        .map(|_| ())
+        .map_err(|error| format!("Could not clear Aether conversation: {error}"))
 }
 
 #[tauri::command]
@@ -73,6 +130,9 @@ pub fn run() {
             list_models,
             load_settings,
             save_settings,
+            load_active_conversation,
+            save_active_conversation,
+            clear_active_conversation,
             submit_message,
             start_streaming_message,
             cancel_streaming_message

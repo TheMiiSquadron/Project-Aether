@@ -78,6 +78,28 @@ type ConversationMessage = {
   content: string;
   status?: "complete" | "generating" | "cancelled" | "error";
   attachmentName?: string;
+  createdAt: string;
+};
+
+type StoredConversation = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  activeModel?: string | null;
+  metadataJson: string;
+  messages: StoredMessage[];
+};
+
+type StoredMessage = {
+  id: string;
+  conversationId: string;
+  role: "System" | "User" | "Assistant";
+  content: string;
+  createdAt: string;
+  status: "Complete" | "Streaming" | "Cancelled" | "Failed" | "Partial";
+  position: number;
+  metadataJson: string;
 };
 
 type StartStreamResponse = {
@@ -149,6 +171,9 @@ export function App() {
   const activeAssistantMessageIdRef = useRef<string | null>(null);
   const shouldStickToBottomRef = useRef(true);
   const settingsLoadedRef = useRef(false);
+  const conversationLoadedRef = useRef(false);
+  const activeConversationIdRef = useRef<string | null>(null);
+  const activeConversationCreatedAtRef = useRef<string | null>(null);
   const [message, setMessage] = useState("");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
@@ -178,6 +203,21 @@ export function App() {
       });
 
     void refreshModels();
+
+    invoke<StoredConversation | null>("load_active_conversation")
+      .then((storedConversation) => {
+        if (storedConversation) {
+          activeConversationIdRef.current = storedConversation.id;
+          activeConversationCreatedAtRef.current = storedConversation.createdAt;
+          setConversation(storedConversation.messages.map(mapStoredMessageToConversationMessage));
+        }
+      })
+      .catch((caughtError) => {
+        setError(normalizeStorageError(caughtError));
+      })
+      .finally(() => {
+        conversationLoadedRef.current = true;
+      });
   }, []);
 
   useEffect(() => {
@@ -210,16 +250,38 @@ export function App() {
     };
   }, []);
 
+  const selectedModel = settings.selectedModel || availableModels[0]?.name || defaultModel.name;
+  const selectedModelMissing =
+    availableModels.length > 0 && !availableModels.some((model) => model.name === selectedModel);
+  const contextCount = estimateContextCount(message, attachment);
+
   useEffect(() => {
     if (shouldStickToBottomRef.current && threadEndRef.current?.scrollIntoView) {
       threadEndRef.current.scrollIntoView({ block: "end", behavior: "smooth" });
     }
   }, [conversation]);
 
-  const selectedModel = settings.selectedModel || availableModels[0]?.name || defaultModel.name;
-  const selectedModelMissing =
-    availableModels.length > 0 && !availableModels.some((model) => model.name === selectedModel);
-  const contextCount = estimateContextCount(message, attachment);
+  useEffect(() => {
+    if (!conversationLoadedRef.current || conversation.length === 0) {
+      return;
+    }
+
+    const saveHandle = window.setTimeout(() => {
+      const storedConversation = buildStoredConversation(
+        conversation,
+        selectedModel,
+        activeConversationIdRef.current,
+        activeConversationCreatedAtRef.current
+      );
+      activeConversationIdRef.current = storedConversation.id;
+      activeConversationCreatedAtRef.current = storedConversation.createdAt;
+      void invoke("save_active_conversation", { conversation: storedConversation }).catch((caughtError) => {
+        setError(normalizeStorageError(caughtError));
+      });
+    }, 300);
+
+    return () => window.clearTimeout(saveHandle);
+  }, [conversation, selectedModel]);
 
   async function refreshModels() {
     setProviderStatus("connecting");
@@ -337,18 +399,21 @@ export function App() {
 
     const messageForProvider = buildMessageForProvider(trimmedMessage, attachment);
     const userDisplayContent = trimmedMessage || `Please review ${attachment?.name}.`;
+    const now = new Date().toISOString();
     const userMessage: ConversationMessage = {
       id: crypto.randomUUID(),
       role: "user",
       content: userDisplayContent,
       status: "complete",
-      attachmentName: attachment?.name
+      attachmentName: attachment?.name,
+      createdAt: now
     };
     const pendingAssistantMessage: ConversationMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
       content: "",
-      status: "generating"
+      status: "generating",
+      createdAt: now
     };
     const streamId = crypto.randomUUID();
 
@@ -431,6 +496,11 @@ export function App() {
     }
 
     setConversation([]);
+    activeConversationIdRef.current = null;
+    activeConversationCreatedAtRef.current = null;
+    void invoke("clear_active_conversation").catch((caughtError) => {
+      setError(normalizeStorageError(caughtError));
+    });
     setError(null);
     setAttachment(null);
     setAttachmentError(null);
@@ -764,6 +834,99 @@ export function App() {
       ) : null}
     </main>
   );
+}
+
+function normalizeStorageError(error: unknown): ProviderErrorPayload {
+  return {
+    kind: "requestFailed",
+    message: "Aether could not update the saved conversation.",
+    action: "You can keep chatting, but this conversation may not be saved until the problem is fixed.",
+    diagnostics: error instanceof Error ? error.message : String(error)
+  };
+}
+
+function mapStoredMessageToConversationMessage(message: StoredMessage): ConversationMessage {
+  return {
+    id: message.id,
+    role: message.role === "User" ? "user" : "assistant",
+    content: message.content,
+    status: mapStoredStatusToConversationStatus(message.status),
+    attachmentName: readAttachmentName(message.metadataJson),
+    createdAt: message.createdAt
+  };
+}
+
+function mapStoredStatusToConversationStatus(status: StoredMessage["status"]): ConversationMessage["status"] {
+  if (status === "Cancelled") {
+    return "cancelled";
+  }
+  if (status === "Failed") {
+    return "error";
+  }
+  return "complete";
+}
+
+function mapConversationStatusToStoredStatus(status: ConversationMessage["status"]): StoredMessage["status"] {
+  if (status === "cancelled") {
+    return "Cancelled";
+  }
+  if (status === "error") {
+    return "Failed";
+  }
+  if (status === "generating") {
+    return "Partial";
+  }
+  return "Complete";
+}
+
+function buildStoredConversation(
+  conversation: ConversationMessage[],
+  selectedModel: string,
+  activeConversationId: string | null,
+  activeConversationCreatedAt: string | null
+): StoredConversation {
+  const id = activeConversationId || "active-conversation";
+  const createdAt = activeConversationCreatedAt || conversation[0]?.createdAt || new Date().toISOString();
+  const updatedAt = new Date().toISOString();
+
+  return {
+    id,
+    title: buildConversationTitle(conversation),
+    createdAt,
+    updatedAt,
+    activeModel: selectedModel,
+    metadataJson: "{}",
+    messages: conversation.map((message, index) => ({
+      id: message.id,
+      conversationId: id,
+      role: message.role === "user" ? "User" : "Assistant",
+      content: message.content,
+      createdAt: message.createdAt,
+      status: mapConversationStatusToStoredStatus(message.status),
+      position: index,
+      metadataJson: message.attachmentName
+        ? JSON.stringify({ attachmentName: message.attachmentName })
+        : "{}"
+    }))
+  };
+}
+
+function buildConversationTitle(conversation: ConversationMessage[]) {
+  const firstUserMessage = conversation.find((message) => message.role === "user")?.content.trim();
+  if (!firstUserMessage) {
+    return "New conversation";
+  }
+
+  return firstUserMessage.length > 64 ? `${firstUserMessage.slice(0, 61)}...` : firstUserMessage;
+}
+
+function readAttachmentName(metadataJson: string) {
+  try {
+    const metadata = JSON.parse(metadataJson) as { attachmentName?: unknown };
+    return typeof metadata.attachmentName === "string" ? metadata.attachmentName : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
