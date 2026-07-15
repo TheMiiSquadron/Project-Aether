@@ -1,11 +1,11 @@
 # Project Status
 
-**Status:** Living Document  
-**Current Phase:** Release  
-**Current Status:** v0.1.0 release validated on macOS/Orion and Windows/Envy  
-**Current Target:** v0.1.0  
-**Last Completed Milestone:** v0.1.0 release validation  
-**Next Milestone:** Begin v0.2 planning for conversation history and persistence
+**Status:** Living Document
+**Current Phase:** v0.2 Planning
+**Current Status:** v0.1.0 release validated on macOS/Orion and Windows/Envy
+**Current Target:** v0.2.0
+**Last Completed Milestone:** v0.1.0 release
+**Next Milestone:** Define and freeze v0.2 conversation history and persistence
 
 Project Aether is being developed design-first. The v0.1 experience, architecture, responsibilities, data model, event model, settings, and UI direction were validated before code was scaffolded.
 
@@ -23,8 +23,10 @@ Nova's initial identity layer lives in `prompts/nova-system-prompt.md`. The Conv
 
 Aether now discovers installed Ollama models, allows selecting the active model, renders Markdown and code blocks, supports one user-selected UTF-8 text/code attachment up to 1 MB, persists implemented v0.1 settings, shows friendly provider errors, and keeps diagnostics limited to Developer Mode.
 
-Memory, tools, conversation history, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.1.
+Memory, tools, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.2. Conversation history and persistence are now the active v0.2 planning focus.
 
 Release notes are prepared in [Release Notes v0.1.0](Release-Notes-v0.1.0.md). The v0.1.0 release checklist is complete after macOS/Orion validation, Windows/Envy validation, and final release tagging.
 
 NOVA remains the intended high-performance runtime for larger-model, GPU, and long-session validation after the v0.1 release. It is not required to validate the v0.1 Windows app build.
+
+The v0.2 planning scope is documented in [v0.2 — Conversation History](13-v0.2-Conversation-History.md). Its purpose is to make conversations persistent, organized, searchable, and recoverable before Aether moves into long-term memory or tools.

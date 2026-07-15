@@ -17,6 +17,55 @@ Last Updated: 2026-07-15
 * v0.9 — Automation  
 * v1.0 — A mature personal AI platform
 
+
+## v0.2 — Conversation History and Persistence
+
+### Goal
+
+Aether v0.2 makes conversations persistent, organized, searchable, and recoverable.
+
+The core promise is trust: if Alex has an important conversation with Nova, Aether should preserve it clearly and make it easy to return to later.
+
+### Included
+
+* Saved conversations persisted locally.
+* Conversation sidebar with new chat, recent conversations, rename, and delete with confirmation.
+* Conversation titles, starting with simple automatic titles based on the first user message.
+* Basic local search across conversation titles and message text.
+* Storage foundation for persistent conversation data, likely SQLite behind the existing Storage boundary.
+* Migration and backup-minded storage decisions that avoid trapping data in an opaque format.
+* Export current conversation as Markdown.
+
+### Deliberately Deferred
+
+* Long-term memory.
+* Tool calling.
+* General file access.
+* Coding actions.
+* Portal integration.
+* Multi-device sync.
+* Agents.
+* Automation.
+
+### Definition of Done
+
+1. Conversations survive app restart.
+2. No messages are lost when Aether closes normally.
+3. Failed, cancelled, and partial generations are saved with clear states.
+4. Deleting a conversation requires confirmation.
+5. Renaming and switching conversations do not silently interrupt active generation.
+6. Storage errors are shown clearly and do not corrupt existing conversations.
+7. Aether remains responsive with a reasonable number of saved conversations.
+8. The current conversation can be exported as Markdown.
+
+### Implementation Notes
+
+v0.2 should extend the existing architecture rather than bypass it. The UI should ask the Conversation Engine and Storage layer for conversation state; it should not read or write database files directly.
+
+SQLite is the preferred storage direction for v0.2, but it should remain behind the Storage boundary so future migrations, exports, and backups remain manageable.
+
+See [v0.2 — Conversation History](docs/13-v0.2-Conversation-History.md) for the focused planning document.
+
 ## v0.1 — First Conversation
 
 ### Goal

@@ -57,6 +57,7 @@ The v0.1 app includes Markdown rendering, code blocks with copy actions, user-in
 * [Mission and Principles](docs/01-Mission-and-Principles.md)
 * [Nova Personality](docs/02-Nova-Personality.md)
 * [v0.1 — First Conversation](docs/03-v0.1-First-Conversation.md)
+* [v0.2 — Conversation History](docs/13-v0.2-Conversation-History.md)
 * [High-Level Architecture](docs/04-High-Level-Architecture.md)
 * [Subsystem Responsibilities](docs/05-Subsystem-Responsibilities.md)
 * [Technology Stack](docs/06-Technology-Stack.md)
