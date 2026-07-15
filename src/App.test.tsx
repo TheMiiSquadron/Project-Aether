@@ -236,23 +236,52 @@ describe("App shell", () => {
     expect(shell).toHaveAttribute("data-theme", "observatory");
   });
 
-  it("renders Markdown code blocks with a copy action", async () => {
+  it("renders representative Markdown with code copy support", async () => {
     const user = userEvent.setup();
     render(<App />);
 
-    await user.type(screen.getByLabelText("Message Nova"), "Show code");
+    await user.type(screen.getByLabelText("Message Nova"), "Show markdown");
     await user.click(screen.getByRole("button", { name: "Send" }));
     const streamId = latestStreamId();
 
     emitStream({
       streamId,
-      event: { type: "chunk", content: "```ts\nconst name = \"Nova\";\n```" }
+      event: {
+        type: "chunk",
+        content: `# Simple Markdown File
+
+This paragraph includes **bold text**, \`inline code\`, and [a link](https://example.com).
+
+- First item
+- Second item
+
+1. Ordered one
+2. Ordered two
+
+> Quoted content should stand apart.
+
+| Name | Role |
+| --- | --- |
+| Nova | Assistant |
+
+\`\`\`ts
+const name = "Nova";
+function greet() {
+  return name;
+}
+\`\`\``
+      }
     });
     emitStream({
       streamId,
       event: { type: "completed", model: "llama3.2:latest" }
     });
 
+    expect(await screen.findByRole("heading", { name: "Simple Markdown File" })).toBeInTheDocument();
+    expect(screen.getByText("First item")).toBeInTheDocument();
+    expect(screen.getByText("Ordered two")).toBeInTheDocument();
+    expect(screen.getByText("Quoted content should stand apart.")).toBeInTheDocument();
+    expect(screen.getByRole("cell", { name: "Assistant" })).toBeInTheDocument();
     expect(await screen.findByText("ts")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
   });
