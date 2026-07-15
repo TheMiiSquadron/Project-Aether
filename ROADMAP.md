@@ -66,7 +66,7 @@ Nova can hold a reliable, streaming conversation using a local AI model.
 
 These milestones complete `v0.1 — First Conversation` as a polished local chat application. They should be implemented in order and should not expand v0.1 into conversation history, memory, general tools, Portal integration, agents, automation, or other future roadmap features.
 
-**Implementation status:** complete on the macOS/Orion path. Windows validation remains pending on Envy. NOVA validation is deferred to later high-performance testing.
+**Implementation status:** complete and validated on macOS/Orion and Windows/Envy. NOVA validation is deferred to later high-performance testing.
 
 #### 1. Markdown Rendering
 
@@ -126,6 +126,6 @@ Before tagging `v0.1.0`, confirm:
 * [x] No known major bugs
 * [x] Documentation current
 * [x] Reproducible macOS build
-* [ ] Windows build and core functionality validated on Envy
+* [x] Windows build and core functionality validated on Envy
 * [x] Release notes prepared
-* [ ] Git tag created for v0.1.0
+* [x] Git tag created for v0.1.0

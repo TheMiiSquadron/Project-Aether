@@ -1,6 +1,6 @@
 # Release Notes v0.1.0
 
-**Status:** Release candidate notes  
+**Status:** Released  
 **Target:** v0.1.0 — First Conversation
 
 ## Summary
@@ -62,13 +62,13 @@ The following remain outside v0.1:
 * [x] No known major bugs
 * [x] Documentation current
 * [x] Reproducible macOS build
-* [ ] Windows build and core functionality validated on Envy
+* [x] Windows build and core functionality validated on Envy
 * [x] Release notes prepared
-* [ ] Git tag created for v0.1.0
+* [x] Git tag created for v0.1.0
 
 ## Windows Validation Target
 
-Envy is the v0.1 Windows validation machine. The release checklist should be marked complete after Envy confirms:
+Envy was used as the v0.1 Windows validation machine and confirmed:
 
 * `npm test`
 * `npm run build`
