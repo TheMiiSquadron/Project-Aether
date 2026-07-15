@@ -123,7 +123,6 @@ body,
 
 body {
   min-width: 800px;
-  min-height: 600px;
   overflow: hidden;
 }
 
@@ -139,7 +138,8 @@ input {
   grid-template-rows: auto minmax(0, 1fr) auto;
   width: 100%;
   height: 100%;
-  min-height: 600px;
+  min-height: 0;
+  overflow: hidden;
   background:
     radial-gradient(circle at 50% 0%, var(--shell-glow), transparent 34rem),
     linear-gradient(180deg, var(--shell-gradient-top) 0%, var(--shell-gradient-bottom) 100%);
@@ -386,6 +386,8 @@ textarea:focus-visible {
 }
 
 .composer {
+  position: relative;
+  z-index: 1;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
   align-items: end;
@@ -984,5 +986,99 @@ textarea:focus-visible {
   .composer {
     width: calc(100% - 1.2rem);
     margin-bottom: 0.75rem;
+  }
+}
+
+@media (max-height: 640px) {
+  .app-header {
+    min-height: 64px;
+    padding-top: 0.72rem;
+    padding-bottom: 0.72rem;
+  }
+
+  .conversation-region {
+    padding-top: 1.1rem;
+    padding-bottom: 1.1rem;
+  }
+
+  .empty-state {
+    margin-top: -1.6rem;
+  }
+
+  .nova-label {
+    margin-bottom: 1rem;
+  }
+
+  .empty-state h1 {
+    font-size: clamp(1.9rem, 5vh, 2.75rem);
+  }
+
+  .agenda {
+    margin-top: 0.75rem;
+    font-size: clamp(1.08rem, 3vh, 1.42rem);
+  }
+
+  .composer {
+    margin-bottom: 0.85rem;
+  }
+
+  textarea {
+    max-height: 7rem;
+  }
+}
+
+@media (max-height: 560px) {
+  .app-header {
+    min-height: 56px;
+    padding-top: 0.55rem;
+    padding-bottom: 0.55rem;
+  }
+
+  .conversation-region {
+    padding-top: 0.85rem;
+    padding-bottom: 0.85rem;
+  }
+
+  .empty-state {
+    margin-top: 0;
+  }
+
+  .nova-label {
+    margin-bottom: 0.7rem;
+  }
+
+  .empty-state h1 {
+    font-size: 1.9rem;
+  }
+
+  .agenda {
+    margin-top: 0.55rem;
+    font-size: 1.05rem;
+  }
+
+  .composer {
+    gap: 0.55rem;
+    width: calc(100% - 1rem);
+    margin-bottom: 0.7rem;
+    padding: 0.48rem;
+  }
+
+  .send-button {
+    min-width: 76px;
+    height: 42px;
+    padding-right: 0.82rem;
+    padding-left: 0.82rem;
+  }
+
+  .composer-button {
+    width: 42px;
+    height: 42px;
+  }
+
+  textarea {
+    min-height: 42px;
+    max-height: 5.5rem;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
   }
 }
