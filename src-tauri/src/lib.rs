@@ -3,9 +3,13 @@ mod model_provider;
 mod ollama;
 mod shell;
 
-use conversation::{SubmitMessageRequest, SubmitMessageResponse};
+use conversation::{
+    ActiveStreams, CancelStreamRequest, CancelStreamResponse, StartStreamResponse,
+    SubmitMessageRequest, SubmitMessageResponse,
+};
 use model_provider::ProviderErrorPayload;
 pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PROMPT};
+use tauri::{AppHandle, State};
 
 #[tauri::command]
 fn shell_metadata() -> ShellMetadata {
@@ -19,10 +23,33 @@ async fn submit_message(
     conversation::submit_message(request).await
 }
 
+#[tauri::command]
+fn start_streaming_message(
+    app: AppHandle,
+    active_streams: State<'_, ActiveStreams>,
+    request: SubmitMessageRequest,
+) -> Result<StartStreamResponse, ProviderErrorPayload> {
+    conversation::start_streaming_message(app, active_streams.inner().clone(), request)
+}
+
+#[tauri::command]
+fn cancel_streaming_message(
+    active_streams: State<'_, ActiveStreams>,
+    request: CancelStreamRequest,
+) -> CancelStreamResponse {
+    conversation::cancel_streaming_message(active_streams.inner().clone(), request)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![shell_metadata, submit_message])
+        .manage(ActiveStreams::default())
+        .invoke_handler(tauri::generate_handler![
+            shell_metadata,
+            submit_message,
+            start_streaming_message,
+            cancel_streaming_message
+        ])
         .run(tauri::generate_context!())
         .expect("error while running Aether");
 }

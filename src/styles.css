@@ -411,6 +411,19 @@ textarea::placeholder {
   font-style: italic;
 }
 
+.message-card--cancelled {
+  color: var(--secondary-text);
+}
+
+.message-card--cancelled::after {
+  display: block;
+  margin-top: 0.65rem;
+  color: var(--muted-text);
+  font-size: 0.82rem;
+  font-style: italic;
+  content: "Generation stopped.";
+}
+
 .message-card--error,
 .conversation-error {
   border-color: rgba(239, 113, 113, 0.36);

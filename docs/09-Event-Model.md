@@ -17,3 +17,15 @@ Events describe the initial v0.1 application lifecycle and the state changes com
 ## Event Rule
 
 Events describe state changes. Components react only to events relevant to them, and provider-specific details must be normalized before entering the application event stream.
+
+## Current Streaming Implementation
+
+The v0.1 implementation currently emits normalized Tauri conversation stream events for the active assistant response:
+
+* `started` indicates that provider generation has begun.
+* `chunk` carries a provider-normalized text fragment.
+* `completed` indicates the stream finished successfully.
+* `cancelled` indicates the user stopped generation and the partial assistant message should remain visible.
+* `failed` carries a friendly error payload with technical details kept out of the normal UI.
+
+The React UI listens for those events, updates the active assistant message incrementally, and keeps Ollama-specific streaming payloads isolated inside the Ollama provider.

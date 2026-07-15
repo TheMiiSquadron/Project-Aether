@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { ChevronDown, Paperclip, Send, Settings, Square } from "lucide-react";
 
 const placeholderModel = {
@@ -19,12 +20,11 @@ type ConversationMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
-  status?: "complete" | "generating" | "error";
+  status?: "complete" | "generating" | "cancelled" | "error";
 };
 
-type SubmitMessageResponse = {
-  model: string;
-  response: string;
+type StartStreamResponse = {
+  streamId: string;
 };
 
 type ProviderErrorPayload = {
@@ -34,17 +34,40 @@ type ProviderErrorPayload = {
   diagnostics?: string | null;
 };
 
+type ConversationStreamEvent =
+  | { type: "started"; model: string }
+  | { type: "chunk"; content: string }
+  | { type: "completed"; model: string }
+  | { type: "cancelled" }
+  | { type: "failed"; error: ProviderErrorPayload };
+
+type ConversationStreamPayload = {
+  streamId: string;
+  event: ConversationStreamEvent;
+};
+
 type ComposerActionButtonProps = {
   isGenerating?: boolean;
   disabled?: boolean;
+  onStop?: () => void;
 };
 
-function ComposerActionButton({ isGenerating = false, disabled = false }: ComposerActionButtonProps) {
+function ComposerActionButton({
+  isGenerating = false,
+  disabled = false,
+  onStop
+}: ComposerActionButtonProps) {
   const label = isGenerating ? "Stop" : "Send";
   const Icon = isGenerating ? Square : Send;
 
   return (
-    <button className="send-button" type="submit" aria-label={label} disabled={disabled}>
+    <button
+      className="send-button"
+      type={isGenerating ? "button" : "submit"}
+      aria-label={label}
+      disabled={disabled}
+      onClick={isGenerating ? onStop : undefined}
+    >
       <span>{label}</span>
       <Icon size={16} strokeWidth={1.9} aria-hidden="true" />
     </button>
@@ -53,6 +76,11 @@ function ComposerActionButton({ isGenerating = false, disabled = false }: Compos
 
 export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const conversationRegionRef = useRef<HTMLElement>(null);
+  const threadEndRef = useRef<HTMLDivElement>(null);
+  const activeStreamIdRef = useRef<string | null>(null);
+  const activeAssistantMessageIdRef = useRef<string | null>(null);
+  const shouldStickToBottomRef = useRef(true);
   const [message, setMessage] = useState("");
   const [appearancePreset, setAppearancePreset] = useState<AppearancePreset>("crimson");
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
@@ -62,6 +90,113 @@ export function App() {
   useEffect(() => {
     composerRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    let isMounted = true;
+    let unlisten: (() => void) | undefined;
+
+    listen<ConversationStreamPayload>("conversation-stream", (event) => {
+      if (isMounted) {
+        handleStreamEvent(event.payload);
+      }
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      isMounted = false;
+      unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (shouldStickToBottomRef.current && threadEndRef.current?.scrollIntoView) {
+      threadEndRef.current.scrollIntoView({ block: "end" });
+    }
+  }, [conversation]);
+
+  const finishGeneration = () => {
+    activeStreamIdRef.current = null;
+    activeAssistantMessageIdRef.current = null;
+    setIsGenerating(false);
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  };
+
+  const updateActiveAssistantMessage = (
+    update: (message: ConversationMessage) => ConversationMessage
+  ) => {
+    const activeAssistantMessageId = activeAssistantMessageIdRef.current;
+    if (!activeAssistantMessageId) {
+      return;
+    }
+
+    setConversation((current) =>
+      current.map((conversationMessage) =>
+        conversationMessage.id === activeAssistantMessageId
+          ? update(conversationMessage)
+          : conversationMessage
+      )
+    );
+  };
+
+  const markActiveAssistantCancelled = () => {
+    updateActiveAssistantMessage((conversationMessage) => ({
+      ...conversationMessage,
+      content: conversationMessage.content || "Generation stopped.",
+      status: "cancelled"
+    }));
+    finishGeneration();
+  };
+
+  const handleStreamEvent = (payload: ConversationStreamPayload) => {
+    if (payload.streamId !== activeStreamIdRef.current) {
+      return;
+    }
+
+    switch (payload.event.type) {
+      case "started":
+        updateActiveAssistantMessage((conversationMessage) => ({
+          ...conversationMessage,
+          content: "",
+          status: "generating"
+        }));
+        break;
+
+      case "chunk": {
+        const { content } = payload.event;
+        updateActiveAssistantMessage((conversationMessage) => ({
+          ...conversationMessage,
+          content: `${conversationMessage.content}${content}`,
+          status: "generating"
+        }));
+        break;
+      }
+
+      case "completed":
+        updateActiveAssistantMessage((conversationMessage) => ({
+          ...conversationMessage,
+          status: "complete"
+        }));
+        finishGeneration();
+        break;
+
+      case "cancelled":
+        markActiveAssistantCancelled();
+        break;
+
+      case "failed": {
+        const { error } = payload.event;
+        setError(error);
+        updateActiveAssistantMessage((conversationMessage) => ({
+          ...conversationMessage,
+          content: `${error.message} ${error.action}`,
+          status: "error"
+        }));
+        finishGeneration();
+        break;
+      }
+    }
+  };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -80,34 +215,29 @@ export function App() {
     const pendingAssistantMessage: ConversationMessage = {
       id: crypto.randomUUID(),
       role: "assistant",
-      content: "Nova is thinking...",
+      content: "",
       status: "generating"
     };
+    const streamId = crypto.randomUUID();
 
+    activeAssistantMessageIdRef.current = pendingAssistantMessage.id;
+    activeStreamIdRef.current = streamId;
     setConversation((current) => [...current, userMessage, pendingAssistantMessage]);
     setMessage("");
     setError(null);
     setIsGenerating(true);
+    shouldStickToBottomRef.current = true;
 
     try {
-      const result = await invoke<SubmitMessageResponse>("submit_message", {
+      const result = await invoke<StartStreamResponse>("start_streaming_message", {
         request: {
           message: trimmedMessage,
-          model: placeholderModel.name
+          model: placeholderModel.name,
+          streamId
         }
       });
 
-      setConversation((current) =>
-        current.map((conversationMessage) =>
-          conversationMessage.id === pendingAssistantMessage.id
-            ? {
-                ...conversationMessage,
-                content: result.response,
-                status: "complete"
-              }
-            : conversationMessage
-        )
-      );
+      activeStreamIdRef.current = result.streamId;
     } catch (caughtError) {
       const providerError = normalizeProviderError(caughtError);
       setError(providerError);
@@ -122,10 +252,38 @@ export function App() {
             : conversationMessage
         )
       );
-    } finally {
       setIsGenerating(false);
+      activeAssistantMessageIdRef.current = null;
+      activeStreamIdRef.current = null;
       window.requestAnimationFrame(() => composerRef.current?.focus());
     }
+  };
+
+  const handleStopGeneration = async () => {
+    const streamId = activeStreamIdRef.current;
+    if (!streamId) {
+      return;
+    }
+
+    try {
+      await invoke("cancel_streaming_message", {
+        request: { streamId }
+      });
+      markActiveAssistantCancelled();
+    } catch (caughtError) {
+      const providerError = normalizeProviderError(caughtError);
+      setError(providerError);
+    }
+  };
+
+  const handleConversationScroll = () => {
+    const region = conversationRegionRef.current;
+    if (!region) {
+      return;
+    }
+
+    const distanceFromBottom = region.scrollHeight - region.scrollTop - region.clientHeight;
+    shouldStickToBottomRef.current = distanceFromBottom < 80;
   };
 
   return (
@@ -162,7 +320,13 @@ export function App() {
         </div>
       </header>
 
-      <section className="conversation-region" aria-label="Conversation" aria-busy={isGenerating}>
+      <section
+        className="conversation-region"
+        aria-label="Conversation"
+        aria-busy={isGenerating}
+        ref={conversationRegionRef}
+        onScroll={handleConversationScroll}
+      >
         {conversation.length === 0 ? (
           <div className="empty-state">
             <p className="nova-label">Nova</p>
@@ -180,7 +344,8 @@ export function App() {
                   {conversationMessage.role === "user" ? "You" : "Nova"}
                 </div>
                 <div className={`message-card message-card--${conversationMessage.status ?? "complete"}`}>
-                  {conversationMessage.content}
+                  {conversationMessage.content ||
+                    (conversationMessage.status === "generating" ? "Nova is thinking..." : "")}
                 </div>
               </article>
             ))}
@@ -191,6 +356,7 @@ export function App() {
                 <span>{error.action}</span>
               </div>
             ) : null}
+            <div ref={threadEndRef} aria-hidden="true" />
           </div>
         )}
       </section>
@@ -216,7 +382,11 @@ export function App() {
           disabled={isGenerating}
         />
 
-        <ComposerActionButton isGenerating={isGenerating} disabled={!message.trim() || isGenerating} />
+        <ComposerActionButton
+          isGenerating={isGenerating}
+          disabled={isGenerating ? false : !message.trim()}
+          onStop={handleStopGeneration}
+        />
       </form>
     </main>
   );

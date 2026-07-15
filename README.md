@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: first non-streaming Ollama conversation path implemented with Nova identity prompt
+Status: streaming Ollama conversation path implemented with Nova identity prompt
 
 ## Development
 
@@ -34,7 +34,7 @@ npm run build
 cd src-tauri && cargo test
 ```
 
-The current implementation uses the frozen v0.1 request path:
+The current implementation uses the frozen v0.1 streaming request path:
 
 ```text
 UI -> Conversation Engine -> Model Provider -> Ollama provider
@@ -43,6 +43,8 @@ UI -> Conversation Engine -> Model Provider -> Ollama provider
 For the first local conversation milestone, the selected static model is `llama3.2:latest`.
 
 Nova's initial identity is defined in [prompts/nova-system-prompt.md](prompts/nova-system-prompt.md). The Conversation Engine prepends that prompt to new requests before sending them through the Model Provider.
+
+Streaming responses are delivered from Rust to the React UI as normalized conversation stream events: started, chunk, completed, cancelled, and failed. The UI updates the active assistant message incrementally and lets the Send button become Stop during generation.
 
 ## Documentation
 

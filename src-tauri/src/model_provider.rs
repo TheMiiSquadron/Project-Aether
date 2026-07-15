@@ -1,6 +1,10 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -32,6 +36,7 @@ pub enum ProviderErrorKind {
     ModelMissing,
     RequestFailed,
     EmptyResponse,
+    Cancelled,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -102,13 +107,65 @@ impl fmt::Display for ProviderError {
 
 impl std::error::Error for ProviderError {}
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+pub enum ProviderStreamEvent {
+    Started { model: String },
+    Chunk { content: String },
+    Completed { model: String },
+    Cancelled,
+    Failed { error: ProviderErrorPayload },
+}
+
+#[derive(Clone, Default)]
+pub struct CancellationToken {
+    cancelled: Arc<AtomicBool>,
+}
+
+impl CancellationToken {
+    pub fn cancel(&self) {
+        self.cancelled.store(true, Ordering::SeqCst);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+}
+
+pub fn normalize_stream_result(
+    model: &str,
+    response: &str,
+    was_cancelled: bool,
+) -> Result<ProviderStreamEvent, ProviderError> {
+    if was_cancelled {
+        return Ok(ProviderStreamEvent::Cancelled);
+    }
+
+    if response.trim().is_empty() {
+        return Err(ProviderError::empty_response(model));
+    }
+
+    Ok(ProviderStreamEvent::Completed {
+        model: model.to_string(),
+    })
+}
+
 #[async_trait]
 pub trait ModelProvider {
     async fn send_message(
         &self,
         request: ConversationRequest,
     ) -> Result<ConversationResponse, ProviderError>;
+
+    async fn stream_message(
+        &self,
+        request: ConversationRequest,
+        cancellation: CancellationToken,
+        on_event: StreamEventHandler,
+    ) -> Result<(), ProviderError>;
 }
+
+pub type StreamEventHandler = Arc<dyn Fn(ProviderStreamEvent) + Send + Sync>;
 
 #[cfg(test)]
 mod tests {
@@ -136,5 +193,35 @@ mod tests {
             "Make sure Ollama is running, then try again."
         );
         assert_eq!(payload.diagnostics, Some("connection refused".to_string()));
+    }
+
+    #[test]
+    fn completion_stream_result_requires_content() {
+        let result = normalize_stream_result("llama3.2:latest", "Hello", false)
+            .expect("complete stream with content");
+
+        assert_eq!(
+            result,
+            ProviderStreamEvent::Completed {
+                model: "llama3.2:latest".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn cancellation_stream_result_wins_over_empty_content() {
+        let result =
+            normalize_stream_result("llama3.2:latest", "", true).expect("cancelled stream");
+
+        assert_eq!(result, ProviderStreamEvent::Cancelled);
+    }
+
+    #[test]
+    fn empty_stream_result_becomes_actionable_error() {
+        let error = normalize_stream_result("llama3.2:latest", "", false)
+            .expect_err("empty completed stream fails");
+
+        assert_eq!(error.kind, ProviderErrorKind::EmptyResponse);
+        assert!(error.action.contains("Try sending"));
     }
 }
