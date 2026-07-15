@@ -3,6 +3,7 @@ mod model_provider;
 mod ollama;
 mod settings;
 mod shell;
+pub mod storage;
 
 use conversation::{
     ActiveStreams, CancelStreamRequest, CancelStreamResponse, StartStreamResponse,
