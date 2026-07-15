@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: first non-streaming Ollama conversation path implemented
+Status: first non-streaming Ollama conversation path implemented with Nova identity prompt
 
 ## Development
 
@@ -41,6 +41,8 @@ UI -> Conversation Engine -> Model Provider -> Ollama provider
 ```
 
 For the first local conversation milestone, the selected static model is `llama3.2:latest`.
+
+Nova's initial identity is defined in [prompts/nova-system-prompt.md](prompts/nova-system-prompt.md). The Conversation Engine prepends that prompt to new requests before sending them through the Model Provider.
 
 ## Documentation
 

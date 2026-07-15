@@ -3,6 +3,8 @@ use crate::ollama::OllamaProvider;
 use crate::shell::DEFAULT_MODEL_NAME;
 use serde::{Deserialize, Serialize};
 
+const NOVA_SYSTEM_PROMPT: &str = include_str!("../../prompts/nova-system-prompt.md");
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SubmitMessageRequest {
@@ -15,6 +17,18 @@ pub struct SubmitMessageRequest {
 pub struct SubmitMessageResponse {
     pub model: String,
     pub response: String,
+}
+
+fn nova_system_prompt() -> &'static str {
+    NOVA_SYSTEM_PROMPT.trim()
+}
+
+fn build_prompt(user_message: &str) -> String {
+    format!(
+        "System:\n{}\n\nUser:\n{}",
+        nova_system_prompt(),
+        user_message
+    )
 }
 
 pub async fn submit_to_provider<P: ModelProvider + Sync>(
@@ -35,8 +49,12 @@ pub async fn submit_to_provider<P: ModelProvider + Sync>(
         .model
         .filter(|model| !model.trim().is_empty())
         .unwrap_or_else(|| DEFAULT_MODEL_NAME.to_string());
+    let prompt = build_prompt(&message);
     let response = provider
-        .send_message(ConversationRequest { model, message })
+        .send_message(ConversationRequest {
+            model,
+            message: prompt,
+        })
         .await
         .map_err(ProviderErrorPayload::from)?;
 
@@ -79,7 +97,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn submit_uses_default_model_and_trims_message() {
+    async fn submit_uses_default_model_trims_message_and_injects_identity_prompt() {
         let provider = MockProvider {
             request: Mutex::new(None),
             result: Ok(ConversationResponse {
@@ -99,13 +117,20 @@ mod tests {
         .expect("submit succeeds");
 
         assert_eq!(result.response, "Hello.");
-        assert_eq!(
-            *provider.request.lock().expect("request lock"),
-            Some(ConversationRequest {
-                model: DEFAULT_MODEL_NAME.to_string(),
-                message: "Hello Nova".to_string(),
-            })
-        );
+        let request = provider
+            .request
+            .lock()
+            .expect("request lock")
+            .clone()
+            .expect("provider receives request");
+
+        assert_eq!(request.model, DEFAULT_MODEL_NAME);
+        assert!(request.message.starts_with("System:\nYou are Nova."));
+        assert!(request
+            .message
+            .contains("You are the AI assistant built into Project Aether."));
+        assert!(request.message.contains("User:\nHello Nova"));
+        assert!(!request.message.contains("  Hello Nova  "));
     }
 
     #[tokio::test]

@@ -2,10 +2,10 @@
 
 **Status:** Living Document  
 **Current Phase:** Implementation  
-**Current Status:** First non-streaming Ollama conversation path implemented  
+**Current Status:** First non-streaming Ollama conversation path implemented with Nova identity prompt  
 **Current Target:** v0.1  
-**Last Completed Milestone:** Connect Nova to Ollama for a single non-streaming request/response  
-**Next Milestone:** Review the first real local conversation in the native app before adding streaming or model discovery
+**Last Completed Milestone:** Add Nova's initial identity layer  
+**Next Milestone:** Review Nova's identity responses in the native app before adding streaming or model discovery
 
 Project Aether is being developed design-first. The v0.1 experience, architecture, responsibilities, data model, event model, settings, and UI direction were validated before code was scaffolded.
 
@@ -18,5 +18,7 @@ UI -> Conversation Engine -> Model Provider -> Ollama provider
 ```
 
 The composer can send one message at a time, display the user message, show a generating state, and render the completed assistant response or a friendly actionable error.
+
+Nova's initial identity layer lives in `prompts/nova-system-prompt.md`. The Conversation Engine prepends that concise system prompt before the first user message so the selected local model understands that the assistant's name is Nova and that it is part of Project Aether.
 
 For this milestone, Aether uses a single static model value, `llama3.2:latest`, because that model is installed on Orion. Model discovery, model switching, streaming, attachments, settings persistence, logging, Markdown rendering, memory, tools, and conversation history remain intentionally deferred until later v0.1 implementation milestones.
