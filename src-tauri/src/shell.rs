@@ -2,7 +2,7 @@ use serde::Serialize;
 
 pub const DEFAULT_GREETING: &str = "Hello, Alex.";
 pub const DEFAULT_PROMPT: &str = "What's on the agenda today?";
-pub const DEFAULT_MODEL_NAME: &str = "qwen3:8b";
+pub const DEFAULT_MODEL_NAME: &str = "llama3.2:latest";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct ShellMetadata {
@@ -39,7 +39,7 @@ mod tests {
         assert_eq!(metadata.assistant_name, "Nova");
         assert_eq!(metadata.greeting, "Hello, Alex.");
         assert_eq!(metadata.prompt, "What's on the agenda today?");
-        assert_eq!(metadata.model_name, "qwen3:8b");
+        assert_eq!(metadata.model_name, "llama3.2:latest");
         assert_eq!(metadata.provider_status, "Ready");
     }
 }

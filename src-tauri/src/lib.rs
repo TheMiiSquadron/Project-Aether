@@ -1,5 +1,10 @@
+mod conversation;
+mod model_provider;
+mod ollama;
 mod shell;
 
+use conversation::{SubmitMessageRequest, SubmitMessageResponse};
+use model_provider::ProviderErrorPayload;
 pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PROMPT};
 
 #[tauri::command]
@@ -7,10 +12,17 @@ fn shell_metadata() -> ShellMetadata {
     ShellMetadata::default()
 }
 
+#[tauri::command]
+async fn submit_message(
+    request: SubmitMessageRequest,
+) -> Result<SubmitMessageResponse, ProviderErrorPayload> {
+    conversation::submit_message(request).await
+}
+
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![shell_metadata])
+        .invoke_handler(tauri::generate_handler![shell_metadata, submit_message])
         .run(tauri::generate_context!())
         .expect("error while running Aether");
 }

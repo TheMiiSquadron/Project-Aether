@@ -1,8 +1,9 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
 import { ChevronDown, Paperclip, Send, Settings, Square } from "lucide-react";
 
 const placeholderModel = {
-  name: "qwen3:8b",
+  name: "llama3.2:latest",
   status: "Ready"
 };
 
@@ -14,16 +15,36 @@ const appearancePresets = [
 
 type AppearancePreset = (typeof appearancePresets)[number]["id"];
 
-type ComposerActionButtonProps = {
-  isGenerating?: boolean;
+type ConversationMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  status?: "complete" | "generating" | "error";
 };
 
-function ComposerActionButton({ isGenerating = false }: ComposerActionButtonProps) {
+type SubmitMessageResponse = {
+  model: string;
+  response: string;
+};
+
+type ProviderErrorPayload = {
+  kind: string;
+  message: string;
+  action: string;
+  diagnostics?: string | null;
+};
+
+type ComposerActionButtonProps = {
+  isGenerating?: boolean;
+  disabled?: boolean;
+};
+
+function ComposerActionButton({ isGenerating = false, disabled = false }: ComposerActionButtonProps) {
   const label = isGenerating ? "Stop" : "Send";
   const Icon = isGenerating ? Square : Send;
 
   return (
-    <button className="send-button" type="submit" aria-label={label}>
+    <button className="send-button" type="submit" aria-label={label} disabled={disabled}>
       <span>{label}</span>
       <Icon size={16} strokeWidth={1.9} aria-hidden="true" />
     </button>
@@ -34,13 +55,77 @@ export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const [message, setMessage] = useState("");
   const [appearancePreset, setAppearancePreset] = useState<AppearancePreset>("crimson");
+  const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [error, setError] = useState<ProviderErrorPayload | null>(null);
 
   useEffect(() => {
     composerRef.current?.focus();
   }, []);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const trimmedMessage = message.trim();
+
+    if (!trimmedMessage || isGenerating) {
+      return;
+    }
+
+    const userMessage: ConversationMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      content: trimmedMessage,
+      status: "complete"
+    };
+    const pendingAssistantMessage: ConversationMessage = {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      content: "Nova is thinking...",
+      status: "generating"
+    };
+
+    setConversation((current) => [...current, userMessage, pendingAssistantMessage]);
+    setMessage("");
+    setError(null);
+    setIsGenerating(true);
+
+    try {
+      const result = await invoke<SubmitMessageResponse>("submit_message", {
+        request: {
+          message: trimmedMessage,
+          model: placeholderModel.name
+        }
+      });
+
+      setConversation((current) =>
+        current.map((conversationMessage) =>
+          conversationMessage.id === pendingAssistantMessage.id
+            ? {
+                ...conversationMessage,
+                content: result.response,
+                status: "complete"
+              }
+            : conversationMessage
+        )
+      );
+    } catch (caughtError) {
+      const providerError = normalizeProviderError(caughtError);
+      setError(providerError);
+      setConversation((current) =>
+        current.map((conversationMessage) =>
+          conversationMessage.id === pendingAssistantMessage.id
+            ? {
+                ...conversationMessage,
+                content: `${providerError.message} ${providerError.action}`,
+                status: "error"
+              }
+            : conversationMessage
+        )
+      );
+    } finally {
+      setIsGenerating(false);
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+    }
   };
 
   return (
@@ -77,12 +162,37 @@ export function App() {
         </div>
       </header>
 
-      <section className="conversation-region" aria-label="Conversation">
-        <div className="empty-state">
-          <p className="nova-label">Nova</p>
-          <h1>Hello, Alex.</h1>
-          <p className="agenda">What's on the agenda today?</p>
-        </div>
+      <section className="conversation-region" aria-label="Conversation" aria-busy={isGenerating}>
+        {conversation.length === 0 ? (
+          <div className="empty-state">
+            <p className="nova-label">Nova</p>
+            <h1>Hello, Alex.</h1>
+            <p className="agenda">What's on the agenda today?</p>
+          </div>
+        ) : (
+          <div className="conversation-thread" aria-live="polite">
+            {conversation.map((conversationMessage) => (
+              <article
+                className={`message-row message-row--${conversationMessage.role}`}
+                key={conversationMessage.id}
+              >
+                <div className="message-author">
+                  {conversationMessage.role === "user" ? "You" : "Nova"}
+                </div>
+                <div className={`message-card message-card--${conversationMessage.status ?? "complete"}`}>
+                  {conversationMessage.content}
+                </div>
+              </article>
+            ))}
+
+            {error ? (
+              <div className="conversation-error" role="alert">
+                <strong>{error.message}</strong>
+                <span>{error.action}</span>
+              </div>
+            ) : null}
+          </div>
+        )}
       </section>
 
       <form className="composer" aria-label="Message composer" onSubmit={handleSubmit}>
@@ -97,15 +207,30 @@ export function App() {
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) {
               event.preventDefault();
+              event.currentTarget.form?.requestSubmit();
             }
           }}
           rows={1}
           placeholder="Message Nova..."
           aria-label="Message Nova"
+          disabled={isGenerating}
         />
 
-        <ComposerActionButton />
+        <ComposerActionButton isGenerating={isGenerating} disabled={!message.trim() || isGenerating} />
       </form>
     </main>
   );
+}
+
+function normalizeProviderError(error: unknown): ProviderErrorPayload {
+  if (typeof error === "object" && error !== null && "message" in error && "action" in error) {
+    return error as ProviderErrorPayload;
+  }
+
+  return {
+    kind: "requestFailed",
+    message: "Nova could not complete the request.",
+    action: "Try again. If the problem continues, check Ollama and the selected model.",
+    diagnostics: error instanceof Error ? error.message : String(error)
+  };
 }

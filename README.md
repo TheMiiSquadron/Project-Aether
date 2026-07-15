@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: v0.1 scaffold started
+Status: first non-streaming Ollama conversation path implemented
 
 ## Development
 
@@ -33,6 +33,14 @@ npm test
 npm run build
 cd src-tauri && cargo test
 ```
+
+The current implementation uses the frozen v0.1 request path:
+
+```text
+UI -> Conversation Engine -> Model Provider -> Ollama provider
+```
+
+For the first local conversation milestone, the selected static model is `llama3.2:latest`.
 
 ## Documentation
 
