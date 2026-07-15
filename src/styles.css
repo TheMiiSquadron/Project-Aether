@@ -255,6 +255,49 @@ textarea:focus-visible {
   color: var(--primary-text);
 }
 
+.conversation-menu__confirm {
+  display: grid;
+  gap: 0.72rem;
+  width: min(18rem, 72vw);
+  padding: 0.35rem;
+}
+
+.conversation-menu__confirm p {
+  margin: 0;
+  color: var(--shell-text);
+  font-size: 0.9rem;
+  font-weight: 680;
+}
+
+.conversation-menu__confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.conversation-menu__confirm-actions button {
+  border: 1px solid var(--control-border);
+  border-radius: 999px;
+  padding: 0.46rem 0.72rem;
+  color: var(--shell-text);
+  background: var(--control-background);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 720;
+  cursor: pointer;
+}
+
+.conversation-menu__confirm-actions button:hover,
+.conversation-menu__confirm-actions button:focus-visible {
+  border-color: var(--control-hover-border);
+  background: var(--control-hover-background);
+  outline: none;
+}
+
+.conversation-menu__confirm-actions .danger {
+  color: var(--primary-text);
+}
+
 .model-status {
   display: inline-flex;
   align-items: center;

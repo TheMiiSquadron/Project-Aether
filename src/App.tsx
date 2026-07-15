@@ -174,12 +174,15 @@ export function App() {
   const conversationLoadedRef = useRef(false);
   const activeConversationIdRef = useRef<string | null>(null);
   const activeConversationCreatedAtRef = useRef<string | null>(null);
+  const conversationSaveTimeoutRef = useRef<number | null>(null);
+  const activeConversationSaveRef = useRef<Promise<unknown> | null>(null);
   const [message, setMessage] = useState("");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [providerStatus, setProviderStatus] = useState<"ready" | "connecting" | "offline">("connecting");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [conversationMenuOpen, setConversationMenuOpen] = useState(false);
+  const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentContext | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
@@ -264,10 +267,12 @@ export function App() {
 
   useEffect(() => {
     if (!conversationLoadedRef.current || conversation.length === 0) {
+      clearPendingConversationSave();
       return;
     }
 
-    const saveHandle = window.setTimeout(() => {
+    clearPendingConversationSave();
+    conversationSaveTimeoutRef.current = window.setTimeout(() => {
       const storedConversation = buildStoredConversation(
         conversation,
         selectedModel,
@@ -276,12 +281,18 @@ export function App() {
       );
       activeConversationIdRef.current = storedConversation.id;
       activeConversationCreatedAtRef.current = storedConversation.createdAt;
-      void invoke("save_active_conversation", { conversation: storedConversation }).catch((caughtError) => {
+      const savePromise = invoke("save_active_conversation", { conversation: storedConversation });
+      activeConversationSaveRef.current = savePromise;
+      void savePromise.catch((caughtError) => {
         setError(normalizeStorageError(caughtError));
+      }).finally(() => {
+        if (activeConversationSaveRef.current === savePromise) {
+          activeConversationSaveRef.current = null;
+        }
       });
     }, 300);
 
-    return () => window.clearTimeout(saveHandle);
+    return clearPendingConversationSave;
   }, [conversation, selectedModel]);
 
   async function refreshModels() {
@@ -486,24 +497,31 @@ export function App() {
     shouldStickToBottomRef.current = distanceFromBottom < 80;
   };
 
-  const handleClearConversation = () => {
+  function clearPendingConversationSave() {
+    if (conversationSaveTimeoutRef.current !== null) {
+      window.clearTimeout(conversationSaveTimeoutRef.current);
+      conversationSaveTimeoutRef.current = null;
+    }
+  }
+
+  const handleClearConversation = async () => {
     if (!conversation.length || isGenerating) {
       return;
     }
 
-    const shouldClear = window.confirm("Clear the current conversation?");
-    if (!shouldClear) {
-      return;
-    }
-
+    clearPendingConversationSave();
     setConversation([]);
     setConversationMenuOpen(false);
+    setClearConfirmationOpen(false);
     activeConversationIdRef.current = null;
     activeConversationCreatedAtRef.current = null;
-    void invoke("clear_active_conversation").catch((caughtError) => {
-      setError(normalizeStorageError(caughtError));
-    });
     setError(null);
+    try {
+      await activeConversationSaveRef.current;
+      await invoke("clear_active_conversation");
+    } catch (caughtError) {
+      setError(normalizeStorageError(caughtError));
+    }
     setAttachment(null);
     setAttachmentError(null);
     shouldStickToBottomRef.current = true;
@@ -608,21 +626,38 @@ export function App() {
               type="button"
               aria-label="Conversation actions"
               aria-expanded={conversationMenuOpen}
-              onClick={() => setConversationMenuOpen((open) => !open)}
+              onClick={() => {
+                setConversationMenuOpen((open) => !open);
+                setClearConfirmationOpen(false);
+              }}
             >
               <MoreHorizontal size={18} strokeWidth={1.8} aria-hidden="true" />
             </button>
             {conversationMenuOpen ? (
               <div className="conversation-menu" role="menu" aria-label="Conversation actions">
-                <button
-                  className="conversation-menu__item conversation-menu__item--danger"
-                  type="button"
-                  role="menuitem"
-                  disabled={!conversation.length || isGenerating}
-                  onClick={handleClearConversation}
-                >
-                  Clear current conversation
-                </button>
+                {clearConfirmationOpen ? (
+                  <div className="conversation-menu__confirm" role="group" aria-label="Confirm clear conversation">
+                    <p>Clear this conversation?</p>
+                    <div className="conversation-menu__confirm-actions">
+                      <button type="button" onClick={() => setClearConfirmationOpen(false)}>
+                        Cancel
+                      </button>
+                      <button type="button" className="danger" onClick={handleClearConversation}>
+                        Clear conversation
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    className="conversation-menu__item conversation-menu__item--danger"
+                    type="button"
+                    role="menuitem"
+                    disabled={!conversation.length || isGenerating}
+                    onClick={() => setClearConfirmationOpen(true)}
+                  >
+                    Clear current conversation
+                  </button>
+                )}
               </div>
             ) : null}
           </div>

@@ -494,8 +494,9 @@ Plain text remains plain.
 
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
     await user.click(screen.getByRole("menuitem", { name: "Clear current conversation" }));
+    expect(screen.getByText("Clear this conversation?")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Clear conversation" }));
 
-    expect(window.confirm).toHaveBeenCalled();
     expect(invokeMock).toHaveBeenCalledWith("clear_active_conversation");
     expect(screen.queryByText("Ready to clear.")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
