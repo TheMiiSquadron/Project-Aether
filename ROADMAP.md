@@ -19,6 +19,8 @@ Last Updated: 2026-07-15
 
 Future architecture planning should include resource-adaptive backend support for minimal PCs. See [Resource-Adaptive AI Backends](docs/14-Resource-Adaptive-AI-Backends.md).
 
+Future device-platform planning, including Aethernet, theme-aware maps, weather, default-app-like capabilities, and 3D printing support, is captured in [Future Device Platform Vision](docs/15-Future-Device-Platform-Vision.md). These ideas do not change the active v0.2 scope.
+
 ## v0.2 — Conversation History and Persistence
 
 ### Goal

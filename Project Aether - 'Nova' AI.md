@@ -23,4 +23,7 @@ The original Project Aether design document has been split into focused document
 * [UX Philosophy](docs/10-UX-Philosophy.md)
 * [UI Design](docs/11-UI-Design.md)
 * [Settings Design — v0.1](docs/12-Settings-Design-v0.1.md)
+* [v0.2 — Conversation History](docs/13-v0.2-Conversation-History.md)
+* [Resource-Adaptive AI Backends](docs/14-Resource-Adaptive-AI-Backends.md)
+* [Future Device Platform Vision](docs/15-Future-Device-Platform-Vision.md)
 * [Architecture Freeze Review v0.1](docs/Architecture-Freeze-Review-v0.1.md)

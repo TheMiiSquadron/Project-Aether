@@ -67,6 +67,7 @@ The v0.1 app includes Markdown rendering, code blocks with copy actions, user-in
 * [UX Philosophy](docs/10-UX-Philosophy.md)
 * [UI Design](docs/11-UI-Design.md)
 * [Settings Design — v0.1](docs/12-Settings-Design-v0.1.md)
+* [Future Device Platform Vision](docs/15-Future-Device-Platform-Vision.md)
 * [Architecture Freeze Review v0.1](docs/Architecture-Freeze-Review-v0.1.md)
 * [Release Notes v0.1.0](docs/Release-Notes-v0.1.0.md)
 
