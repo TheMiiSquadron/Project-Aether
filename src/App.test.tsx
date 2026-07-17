@@ -114,6 +114,10 @@ describe("App shell", () => {
         return Promise.resolve(undefined);
       }
 
+      if (command === "rename_conversation") {
+        return Promise.resolve(undefined);
+      }
+
       if (command === "start_streaming_message") {
         const request = args as { request: { streamId: string } };
         return Promise.resolve({ streamId: request.request.streamId });
@@ -197,6 +201,9 @@ describe("App shell", () => {
       }
       if (command === "save_settings" || command === "save_conversation") {
         return Promise.resolve(args);
+      }
+      if (command === "rename_conversation") {
+        return Promise.resolve(undefined);
       }
       return Promise.resolve({});
     });
@@ -293,6 +300,84 @@ describe("App shell", () => {
 
     expect(await screen.findByText("Aether is loaded.")).toBeInTheDocument();
     expect(screen.queryByText("Portal is loaded.")).not.toBeInTheDocument();
+  });
+
+  it("renames a saved conversation from the sidebar", async () => {
+    const user = userEvent.setup();
+    let storedTitle = "Original title";
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "list_conversations") {
+        return Promise.resolve([
+          {
+            id: "conversation-1",
+            title: storedTitle,
+            createdAt: "2026-07-15T02:00:00Z",
+            updatedAt: "2026-07-15T02:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 2
+          }
+        ]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve({
+          id: "conversation-1",
+          title: storedTitle,
+          createdAt: "2026-07-15T02:00:00Z",
+          updatedAt: "2026-07-15T02:05:00Z",
+          activeModel: "llama3.2:latest",
+          metadataJson: "{}",
+          messages: [
+            {
+              id: "message-1",
+              conversationId: "conversation-1",
+              role: "user",
+              content: "Original message",
+              createdAt: "2026-07-15T02:00:00Z",
+              status: "complete",
+              position: 0,
+              metadataJson: "{}"
+            }
+          ]
+        });
+      }
+      if (command === "rename_conversation") {
+        const payload = args as { title: string };
+        storedTitle = payload.title;
+        return Promise.resolve(undefined);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+
+    await user.click(await screen.findByRole("button", { name: "Rename conversation Original title" }));
+    const titleInput = screen.getByLabelText("Conversation title");
+    await user.clear(titleInput);
+    await user.type(titleInput, "Renamed title");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+
+    expect(invokeMock).toHaveBeenCalledWith("rename_conversation", {
+      id: "conversation-1",
+      title: "Renamed title",
+      updatedAt: expect.any(String)
+    });
+    expect(await screen.findByText("Renamed title")).toBeInTheDocument();
   });
 
   it("saves the active conversation after Nova responds", async () => {

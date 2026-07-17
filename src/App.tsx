@@ -8,6 +8,7 @@ import {
   MessageSquare,
   MoreHorizontal,
   Paperclip,
+  Pencil,
   Plus,
   RefreshCw,
   Send,
@@ -186,6 +187,7 @@ export function App() {
   const conversationLoadedRef = useRef(false);
   const activeConversationIdRef = useRef<string | null>(null);
   const activeConversationCreatedAtRef = useRef<string | null>(null);
+  const activeConversationTitleRef = useRef<string | null>(null);
   const conversationSaveTimeoutRef = useRef<number | null>(null);
   const activeConversationSaveRef = useRef<Promise<unknown> | null>(null);
   const skipNextConversationSaveRef = useRef(false);
@@ -202,6 +204,8 @@ export function App() {
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
   const [historyLoading, setHistoryLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<ProviderErrorPayload | null>(null);
@@ -286,10 +290,12 @@ export function App() {
         conversation,
         selectedModel,
         activeConversationIdRef.current,
-        activeConversationCreatedAtRef.current
+        activeConversationCreatedAtRef.current,
+        activeConversationTitleRef.current
       );
       activeConversationIdRef.current = storedConversation.id;
       activeConversationCreatedAtRef.current = storedConversation.createdAt;
+      activeConversationTitleRef.current = storedConversation.title;
       setActiveConversationId(storedConversation.id);
       const savePromise = invoke("save_conversation", { conversation: storedConversation });
       activeConversationSaveRef.current = savePromise;
@@ -317,6 +323,7 @@ export function App() {
       } else {
         activeConversationIdRef.current = null;
         activeConversationCreatedAtRef.current = null;
+        activeConversationTitleRef.current = null;
         setActiveConversationId(null);
         setConversation([]);
       }
@@ -353,6 +360,7 @@ export function App() {
       }
       activeConversationIdRef.current = storedConversation.id;
       activeConversationCreatedAtRef.current = storedConversation.createdAt;
+      activeConversationTitleRef.current = storedConversation.title;
       setActiveConversationId(storedConversation.id);
       skipNextConversationSaveRef.current = true;
       setConversation(storedConversation.messages.map(mapStoredMessageToConversationMessage));
@@ -378,7 +386,10 @@ export function App() {
     await activeConversationSaveRef.current;
     activeConversationIdRef.current = null;
     activeConversationCreatedAtRef.current = null;
+    activeConversationTitleRef.current = null;
     setActiveConversationId(null);
+    setRenameConversationId(null);
+    setRenameDraft("");
     setConversation([]);
     setAttachment(null);
     setAttachmentError(null);
@@ -412,11 +423,53 @@ export function App() {
       if (activeConversationIdRef.current === id) {
         activeConversationIdRef.current = null;
         activeConversationCreatedAtRef.current = null;
+        activeConversationTitleRef.current = null;
         setActiveConversationId(null);
         setConversation([]);
       }
 
       setError(null);
+    } catch (caughtError) {
+      setError(normalizeStorageError(caughtError));
+    } finally {
+      setHistoryLoading(false);
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+    }
+  }
+
+  function startRenamingConversation(summary: ConversationSummary) {
+    setRenameConversationId(summary.id);
+    setRenameDraft(summary.title);
+  }
+
+  async function handleRenameConversation(id: string) {
+    const title = renameDraft.trim();
+    if (!title) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      const updatedAt = new Date().toISOString();
+      await invoke("rename_conversation", { id, title, updatedAt });
+      setConversationSummaries((current) =>
+        current.map((summary) =>
+          summary.id === id
+            ? {
+                ...summary,
+                title,
+                updatedAt
+              }
+            : summary
+        )
+      );
+      if (activeConversationIdRef.current === id) {
+        activeConversationTitleRef.current = title;
+      }
+      setRenameConversationId(null);
+      setRenameDraft("");
+      setError(null);
+      await refreshConversationSummaries();
     } catch (caughtError) {
       setError(normalizeStorageError(caughtError));
     } finally {
@@ -646,6 +699,7 @@ export function App() {
     setClearConfirmationOpen(false);
     activeConversationIdRef.current = null;
     activeConversationCreatedAtRef.current = null;
+    activeConversationTitleRef.current = null;
     setActiveConversationId(null);
     setError(null);
     try {
@@ -723,29 +777,68 @@ export function App() {
           {conversationSummaries.length ? (
             conversationSummaries.map((summary) => (
               <div className="history-item-wrap" key={summary.id}>
-                <button
-                  className="history-item"
-                  type="button"
-                  aria-label={`Open conversation ${summary.title}`}
-                  aria-current={summary.id === activeConversationId ? "true" : undefined}
-                  onClick={() => loadConversationById(summary.id)}
-                  disabled={isGenerating || historyLoading}
-                >
-                  <MessageSquare size={15} aria-hidden="true" />
-                  <span className="history-item__text">
-                    <span>{summary.title}</span>
-                    <small>{formatConversationSummary(summary)}</small>
-                  </span>
-                </button>
-                <button
-                  className="history-delete-button"
-                  type="button"
-                  aria-label={`Delete conversation ${summary.title}`}
-                  onClick={() => handleDeleteConversation(summary.id)}
-                  disabled={isGenerating || historyLoading}
-                >
-                  <Trash2 size={14} aria-hidden="true" />
-                </button>
+                {renameConversationId === summary.id ? (
+                  <form
+                    className="history-rename-form"
+                    aria-label={`Rename conversation ${summary.title}`}
+                    onSubmit={(event) => {
+                      event.preventDefault();
+                      void handleRenameConversation(summary.id);
+                    }}
+                  >
+                    <input
+                      value={renameDraft}
+                      onChange={(event) => setRenameDraft(event.target.value)}
+                      aria-label="Conversation title"
+                      autoFocus
+                    />
+                    <div className="history-rename-actions">
+                      <button type="button" onClick={() => setRenameConversationId(null)}>
+                        Cancel
+                      </button>
+                      <button type="submit" disabled={!renameDraft.trim()}>
+                        Save
+                      </button>
+                    </div>
+                  </form>
+                ) : (
+                  <>
+                    <button
+                      className="history-item"
+                      type="button"
+                      aria-label={`Open conversation ${summary.title}`}
+                      aria-current={summary.id === activeConversationId ? "true" : undefined}
+                      onClick={() => loadConversationById(summary.id)}
+                      disabled={isGenerating || historyLoading}
+                    >
+                      <MessageSquare size={15} aria-hidden="true" />
+                      <span className="history-item__text">
+                        <span>{summary.title}</span>
+                        <small>{formatConversationSummary(summary)}</small>
+                      </span>
+                    </button>
+                    <div className="history-item-actions">
+                      <button
+                        className="history-icon-button"
+                        type="button"
+                        aria-label={`Rename conversation ${summary.title}`}
+                        onClick={() => startRenamingConversation(summary)}
+                        disabled={isGenerating || historyLoading}
+                      >
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        className="history-icon-button"
+                        type="button"
+                        aria-label={`Delete conversation ${summary.title}`}
+                        onClick={() => handleDeleteConversation(summary.id)}
+                        disabled={isGenerating || historyLoading}
+                      >
+                        <Trash2 size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             ))
           ) : (
@@ -1125,7 +1218,8 @@ function buildStoredConversation(
   conversation: ConversationMessage[],
   selectedModel: string,
   activeConversationId: string | null,
-  activeConversationCreatedAt: string | null
+  activeConversationCreatedAt: string | null,
+  activeConversationTitle: string | null
 ): StoredConversation {
   const id = activeConversationId || crypto.randomUUID();
   const createdAt = activeConversationCreatedAt || conversation[0]?.createdAt || new Date().toISOString();
@@ -1133,7 +1227,7 @@ function buildStoredConversation(
 
   return {
     id,
-    title: buildConversationTitle(conversation),
+    title: activeConversationTitle || buildConversationTitle(conversation),
     createdAt,
     updatedAt,
     activeModel: selectedModel,

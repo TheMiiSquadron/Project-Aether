@@ -180,7 +180,8 @@ input {
 
 .history-new-button,
 .history-item,
-.history-delete-button {
+.history-icon-button,
+.history-rename-actions button {
   border: 1px solid var(--control-border);
   color: var(--shell-text);
   background: var(--control-background);
@@ -261,33 +262,80 @@ input {
   font-weight: 620;
 }
 
-.history-delete-button {
-  display: inline-grid;
-  width: 32px;
-  height: 32px;
-  place-items: center;
-  border-radius: 999px;
-  color: var(--muted-text);
+.history-item-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
   opacity: 0;
 }
 
-.history-item-wrap:hover .history-delete-button,
-.history-delete-button:focus-visible {
+.history-icon-button {
+  display: inline-grid;
+  width: 30px;
+  height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  color: var(--muted-text);
+}
+
+.history-item-wrap:hover .history-item-actions,
+.history-item-actions:focus-within {
   opacity: 1;
 }
 
 .history-new-button:hover:not(:disabled),
 .history-item:hover:not(:disabled),
-.history-delete-button:hover:not(:disabled) {
+.history-icon-button:hover:not(:disabled),
+.history-rename-actions button:hover:not(:disabled) {
   border-color: var(--control-hover-border);
   background: var(--control-hover-background);
 }
 
 .history-new-button:disabled,
 .history-item:disabled,
-.history-delete-button:disabled {
+.history-icon-button:disabled,
+.history-rename-actions button:disabled {
   cursor: not-allowed;
   opacity: 0.48;
+}
+
+.history-rename-form {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 0.45rem;
+  padding: 0.45rem;
+  border: 1px solid var(--control-border);
+  border-radius: 14px;
+  background: var(--control-background);
+}
+
+.history-rename-form input {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  padding: 0.5rem 0.58rem;
+  color: var(--primary-text);
+  background: color-mix(in srgb, var(--shell-background) 74%, transparent);
+  font-size: 0.86rem;
+}
+
+.history-rename-form input:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.history-rename-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.4rem;
+}
+
+.history-rename-actions button {
+  border-radius: 999px;
+  padding: 0.38rem 0.6rem;
+  font-size: 0.76rem;
+  font-weight: 740;
 }
 
 .history-empty {

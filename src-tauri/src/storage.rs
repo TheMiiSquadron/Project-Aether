@@ -272,6 +272,24 @@ impl ConversationStore {
         Ok(deleted > 0)
     }
 
+    pub fn rename_conversation(
+        &self,
+        id: &str,
+        title: &str,
+        updated_at: &str,
+    ) -> rusqlite::Result<bool> {
+        let updated = self.connection.execute(
+            "
+            UPDATE conversations
+            SET title = ?2, updated_at = ?3
+            WHERE id = ?1
+            ",
+            params![id, title, updated_at],
+        )?;
+
+        Ok(updated > 0)
+    }
+
     pub fn list_conversations(&self) -> rusqlite::Result<Vec<ConversationSummary>> {
         let mut statement = self.connection.prepare(
             "
@@ -459,6 +477,30 @@ mod tests {
             .list_conversations()
             .expect("summaries load")
             .is_empty());
+    }
+
+    #[test]
+    fn renames_conversation_title() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&sample_conversation())
+            .expect("conversation saves");
+
+        assert!(store
+            .rename_conversation(
+                "conversation-1",
+                "Renamed Aether roadmap",
+                "2026-07-15T02:10:00Z"
+            )
+            .expect("conversation renames"));
+
+        let loaded = store
+            .load_conversation("conversation-1")
+            .expect("conversation loads")
+            .expect("conversation exists");
+
+        assert_eq!(loaded.title, "Renamed Aether roadmap");
+        assert_eq!(loaded.updated_at, "2026-07-15T02:10:00Z");
     }
 
     #[test]

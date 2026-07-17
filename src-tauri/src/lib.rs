@@ -105,6 +105,25 @@ fn delete_conversation(app: AppHandle, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn rename_conversation(
+    app: AppHandle,
+    id: String,
+    title: String,
+    updated_at: String,
+) -> Result<(), String> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err("Conversation title cannot be empty.".to_string());
+    }
+
+    let store = open_conversation_store(&app)?;
+    store
+        .rename_conversation(&id, title, &updated_at)
+        .map(|_| ())
+        .map_err(|error| format!("Could not rename Aether conversation: {error}"))
+}
+
+#[tauri::command]
 fn save_active_conversation(
     app: AppHandle,
     conversation: StoredConversation,
@@ -168,6 +187,7 @@ pub fn run() {
             load_conversation,
             save_conversation,
             delete_conversation,
+            rename_conversation,
             save_active_conversation,
             clear_active_conversation,
             submit_message,
