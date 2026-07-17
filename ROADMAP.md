@@ -17,6 +17,7 @@ Last Updated: 2026-07-15
 * v0.9 — Automation  
 * v1.0 — A mature personal AI platform
 
+Future architecture planning should include resource-adaptive backend support for minimal PCs. See [Resource-Adaptive AI Backends](docs/14-Resource-Adaptive-AI-Backends.md).
 
 ## v0.2 — Conversation History and Persistence
 
