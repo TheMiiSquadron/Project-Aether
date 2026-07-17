@@ -14,7 +14,7 @@ use settings::AppSettings;
 pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PROMPT};
 use std::fs;
 use std::path::PathBuf;
-use storage::StoredConversation;
+use storage::{ConversationSummary, StoredConversation};
 use tauri::{AppHandle, Manager, State};
 
 const ACTIVE_CONVERSATION_ID: &str = "active-conversation";
@@ -69,6 +69,39 @@ fn load_active_conversation(app: AppHandle) -> Result<Option<StoredConversation>
     store
         .load_conversation(ACTIVE_CONVERSATION_ID)
         .map_err(|error| format!("Could not load Aether conversation: {error}"))
+}
+
+#[tauri::command]
+fn list_conversations(app: AppHandle) -> Result<Vec<ConversationSummary>, String> {
+    let store = open_conversation_store(&app)?;
+    store
+        .list_conversations()
+        .map_err(|error| format!("Could not list Aether conversations: {error}"))
+}
+
+#[tauri::command]
+fn load_conversation(app: AppHandle, id: String) -> Result<Option<StoredConversation>, String> {
+    let store = open_conversation_store(&app)?;
+    store
+        .load_conversation(&id)
+        .map_err(|error| format!("Could not load Aether conversation: {error}"))
+}
+
+#[tauri::command]
+fn save_conversation(app: AppHandle, conversation: StoredConversation) -> Result<(), String> {
+    let mut store = open_conversation_store(&app)?;
+    store
+        .save_conversation(&conversation)
+        .map_err(|error| format!("Could not save Aether conversation: {error}"))
+}
+
+#[tauri::command]
+fn delete_conversation(app: AppHandle, id: String) -> Result<(), String> {
+    let store = open_conversation_store(&app)?;
+    store
+        .delete_conversation(&id)
+        .map(|_| ())
+        .map_err(|error| format!("Could not delete Aether conversation: {error}"))
 }
 
 #[tauri::command]
@@ -131,6 +164,10 @@ pub fn run() {
             load_settings,
             save_settings,
             load_active_conversation,
+            list_conversations,
+            load_conversation,
+            save_conversation,
+            delete_conversation,
             save_active_conversation,
             clear_active_conversation,
             submit_message,

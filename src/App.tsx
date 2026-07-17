@@ -5,12 +5,15 @@ import {
   ChevronDown,
   Clipboard,
   FileText,
+  MessageSquare,
   MoreHorizontal,
   Paperclip,
+  Plus,
   RefreshCw,
   Send,
   Settings,
   Square,
+  Trash2,
   X
 } from "lucide-react";
 import { MarkdownMessage } from "./MarkdownMessage";
@@ -89,6 +92,15 @@ type StoredConversation = {
   activeModel?: string | null;
   metadataJson: string;
   messages: StoredMessage[];
+};
+
+type ConversationSummary = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  activeModel?: string | null;
+  messageCount: number;
 };
 
 type StoredMessage = {
@@ -176,6 +188,7 @@ export function App() {
   const activeConversationCreatedAtRef = useRef<string | null>(null);
   const conversationSaveTimeoutRef = useRef<number | null>(null);
   const activeConversationSaveRef = useRef<Promise<unknown> | null>(null);
+  const skipNextConversationSaveRef = useRef(false);
   const [message, setMessage] = useState("");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
@@ -187,6 +200,9 @@ export function App() {
   const [attachment, setAttachment] = useState<AttachmentContext | null>(null);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
+  const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [error, setError] = useState<ProviderErrorPayload | null>(null);
 
@@ -208,20 +224,7 @@ export function App() {
 
     void refreshModels();
 
-    invoke<StoredConversation | null>("load_active_conversation")
-      .then((storedConversation) => {
-        if (storedConversation) {
-          activeConversationIdRef.current = storedConversation.id;
-          activeConversationCreatedAtRef.current = storedConversation.createdAt;
-          setConversation(storedConversation.messages.map(mapStoredMessageToConversationMessage));
-        }
-      })
-      .catch((caughtError) => {
-        setError(normalizeStorageError(caughtError));
-      })
-      .finally(() => {
-        conversationLoadedRef.current = true;
-      });
+    loadInitialConversation();
   }, []);
 
   useEffect(() => {
@@ -271,6 +274,12 @@ export function App() {
       return;
     }
 
+    if (skipNextConversationSaveRef.current) {
+      skipNextConversationSaveRef.current = false;
+      clearPendingConversationSave();
+      return;
+    }
+
     clearPendingConversationSave();
     conversationSaveTimeoutRef.current = window.setTimeout(() => {
       const storedConversation = buildStoredConversation(
@@ -281,7 +290,8 @@ export function App() {
       );
       activeConversationIdRef.current = storedConversation.id;
       activeConversationCreatedAtRef.current = storedConversation.createdAt;
-      const savePromise = invoke("save_active_conversation", { conversation: storedConversation });
+      setActiveConversationId(storedConversation.id);
+      const savePromise = invoke("save_conversation", { conversation: storedConversation });
       activeConversationSaveRef.current = savePromise;
       void savePromise.catch((caughtError) => {
         setError(normalizeStorageError(caughtError));
@@ -289,11 +299,131 @@ export function App() {
         if (activeConversationSaveRef.current === savePromise) {
           activeConversationSaveRef.current = null;
         }
+        void refreshConversationSummaries();
       });
     }, 300);
 
     return clearPendingConversationSave;
   }, [conversation, selectedModel]);
+
+  async function loadInitialConversation() {
+    setHistoryLoading(true);
+    try {
+      const summaries = await invoke<ConversationSummary[]>("list_conversations");
+      setConversationSummaries(summaries);
+      const firstConversationId = summaries[0]?.id;
+      if (firstConversationId) {
+        await loadConversationById(firstConversationId);
+      } else {
+        activeConversationIdRef.current = null;
+        activeConversationCreatedAtRef.current = null;
+        setActiveConversationId(null);
+        setConversation([]);
+      }
+    } catch (caughtError) {
+      setError(normalizeStorageError(caughtError));
+    } finally {
+      conversationLoadedRef.current = true;
+      setHistoryLoading(false);
+    }
+  }
+
+  async function refreshConversationSummaries() {
+    try {
+      const summaries = await invoke<ConversationSummary[]>("list_conversations");
+      setConversationSummaries(summaries);
+    } catch (caughtError) {
+      setError(normalizeStorageError(caughtError));
+    }
+  }
+
+  async function loadConversationById(id: string) {
+    if (isGenerating) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      clearPendingConversationSave();
+      await activeConversationSaveRef.current;
+      const storedConversation = await invoke<StoredConversation | null>("load_conversation", { id });
+      if (!storedConversation) {
+        await refreshConversationSummaries();
+        return;
+      }
+      activeConversationIdRef.current = storedConversation.id;
+      activeConversationCreatedAtRef.current = storedConversation.createdAt;
+      setActiveConversationId(storedConversation.id);
+      skipNextConversationSaveRef.current = true;
+      setConversation(storedConversation.messages.map(mapStoredMessageToConversationMessage));
+      if (storedConversation.activeModel) {
+        setSettings((current) => ({ ...current, selectedModel: storedConversation.activeModel ?? current.selectedModel }));
+      }
+      setError(null);
+      shouldStickToBottomRef.current = true;
+    } catch (caughtError) {
+      setError(normalizeStorageError(caughtError));
+    } finally {
+      setHistoryLoading(false);
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+    }
+  }
+
+  async function handleNewConversation() {
+    if (isGenerating) {
+      return;
+    }
+
+    clearPendingConversationSave();
+    await activeConversationSaveRef.current;
+    activeConversationIdRef.current = null;
+    activeConversationCreatedAtRef.current = null;
+    setActiveConversationId(null);
+    setConversation([]);
+    setAttachment(null);
+    setAttachmentError(null);
+    setError(null);
+    setConversationMenuOpen(false);
+    setClearConfirmationOpen(false);
+    shouldStickToBottomRef.current = true;
+    await refreshConversationSummaries();
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
+  async function handleDeleteConversation(id: string) {
+    if (isGenerating) {
+      return;
+    }
+
+    const summary = conversationSummaries.find((conversation) => conversation.id === id);
+    const shouldDelete = window.confirm(`Delete "${summary?.title ?? "this conversation"}"?`);
+    if (!shouldDelete) {
+      return;
+    }
+
+    setHistoryLoading(true);
+    try {
+      clearPendingConversationSave();
+      await activeConversationSaveRef.current;
+      await invoke("delete_conversation", { id });
+      const remaining = conversationSummaries.filter((conversation) => conversation.id !== id);
+      setConversationSummaries(remaining);
+
+      if (activeConversationIdRef.current === id) {
+        activeConversationIdRef.current = null;
+        activeConversationCreatedAtRef.current = null;
+        setActiveConversationId(null);
+        setConversation([]);
+      }
+
+      setError(null);
+    } catch (caughtError) {
+      setError(normalizeStorageError(caughtError));
+    } finally {
+      setHistoryLoading(false);
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+    }
+  }
 
   async function refreshModels() {
     setProviderStatus("connecting");
@@ -510,15 +640,20 @@ export function App() {
     }
 
     clearPendingConversationSave();
+    const conversationIdToDelete = activeConversationIdRef.current;
     setConversation([]);
     setConversationMenuOpen(false);
     setClearConfirmationOpen(false);
     activeConversationIdRef.current = null;
     activeConversationCreatedAtRef.current = null;
+    setActiveConversationId(null);
     setError(null);
     try {
       await activeConversationSaveRef.current;
-      await invoke("clear_active_conversation");
+      if (conversationIdToDelete) {
+        await invoke("delete_conversation", { id: conversationIdToDelete });
+      }
+      await refreshConversationSummaries();
     } catch (caughtError) {
       setError(normalizeStorageError(caughtError));
     }
@@ -566,6 +701,60 @@ export function App() {
       aria-label="Aether"
       style={{ "--message-font-size": `${settings.fontSize}px` } as CSSProperties}
     >
+      <aside className="history-sidebar" aria-label="Conversation history">
+        <div className="history-sidebar__header">
+          <div>
+            <span className="history-sidebar__eyebrow">Aether</span>
+            <h2>Conversations</h2>
+          </div>
+          <button
+            className="history-new-button"
+            type="button"
+            onClick={handleNewConversation}
+            disabled={isGenerating}
+            aria-label="New conversation"
+          >
+            <Plus size={16} aria-hidden="true" />
+            <span>New</span>
+          </button>
+        </div>
+
+        <div className="history-list" aria-busy={historyLoading}>
+          {conversationSummaries.length ? (
+            conversationSummaries.map((summary) => (
+              <div className="history-item-wrap" key={summary.id}>
+                <button
+                  className="history-item"
+                  type="button"
+                  aria-label={`Open conversation ${summary.title}`}
+                  aria-current={summary.id === activeConversationId ? "true" : undefined}
+                  onClick={() => loadConversationById(summary.id)}
+                  disabled={isGenerating || historyLoading}
+                >
+                  <MessageSquare size={15} aria-hidden="true" />
+                  <span className="history-item__text">
+                    <span>{summary.title}</span>
+                    <small>{formatConversationSummary(summary)}</small>
+                  </span>
+                </button>
+                <button
+                  className="history-delete-button"
+                  type="button"
+                  aria-label={`Delete conversation ${summary.title}`}
+                  onClick={() => handleDeleteConversation(summary.id)}
+                  disabled={isGenerating || historyLoading}
+                >
+                  <Trash2 size={14} aria-hidden="true" />
+                </button>
+              </div>
+            ))
+          ) : (
+            <p className="history-empty">Saved conversations will appear here.</p>
+          )}
+        </div>
+      </aside>
+
+      <div className="chat-shell">
       <header className="app-header">
         <div className="identity" aria-label="Application identity">
           <span className="assistant-name">Nova</span>
@@ -884,6 +1073,7 @@ export function App() {
           </section>
         </div>
       ) : null}
+      </div>
     </main>
   );
 }
@@ -937,7 +1127,7 @@ function buildStoredConversation(
   activeConversationId: string | null,
   activeConversationCreatedAt: string | null
 ): StoredConversation {
-  const id = activeConversationId || "active-conversation";
+  const id = activeConversationId || crypto.randomUUID();
   const createdAt = activeConversationCreatedAt || conversation[0]?.createdAt || new Date().toISOString();
   const updatedAt = new Date().toISOString();
 
@@ -970,6 +1160,19 @@ function buildConversationTitle(conversation: ConversationMessage[]) {
   }
 
   return firstUserMessage.length > 64 ? `${firstUserMessage.slice(0, 61)}...` : firstUserMessage;
+}
+
+function formatConversationSummary(summary: ConversationSummary) {
+  const messageLabel = summary.messageCount === 1 ? "1 message" : `${summary.messageCount} messages`;
+  const date = new Date(summary.updatedAt);
+  if (Number.isNaN(date.getTime())) {
+    return messageLabel;
+  }
+
+  return `${messageLabel} · ${date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric"
+  })}`;
 }
 
 function readAttachmentName(metadataJson: string) {

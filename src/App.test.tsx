@@ -90,11 +90,27 @@ describe("App shell", () => {
         return Promise.resolve(null);
       }
 
+      if (command === "list_conversations") {
+        return Promise.resolve([]);
+      }
+
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+
       if (command === "save_active_conversation") {
         return Promise.resolve(undefined);
       }
 
+      if (command === "save_conversation") {
+        return Promise.resolve(undefined);
+      }
+
       if (command === "clear_active_conversation") {
+        return Promise.resolve(undefined);
+      }
+
+      if (command === "delete_conversation") {
         return Promise.resolve(undefined);
       }
 
@@ -135,9 +151,21 @@ describe("App shell", () => {
       if (command === "list_models") {
         return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
       }
-      if (command === "load_active_conversation") {
+      if (command === "list_conversations") {
+        return Promise.resolve([
+          {
+            id: "saved-chat",
+            title: "Saved chat",
+            createdAt: "2026-07-15T02:00:00Z",
+            updatedAt: "2026-07-15T02:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 2
+          }
+        ]);
+      }
+      if (command === "load_conversation") {
         return Promise.resolve({
-          id: "active-conversation",
+          id: "saved-chat",
           title: "Saved chat",
           createdAt: "2026-07-15T02:00:00Z",
           updatedAt: "2026-07-15T02:05:00Z",
@@ -146,7 +174,7 @@ describe("App shell", () => {
           messages: [
             {
               id: "message-1",
-              conversationId: "active-conversation",
+              conversationId: "saved-chat",
               role: "user",
               content: "Remember this?",
               createdAt: "2026-07-15T02:00:00Z",
@@ -156,7 +184,7 @@ describe("App shell", () => {
             },
             {
               id: "message-2",
-              conversationId: "active-conversation",
+              conversationId: "saved-chat",
               role: "assistant",
               content: "Yes, this loaded from storage.",
               createdAt: "2026-07-15T02:01:00Z",
@@ -167,7 +195,7 @@ describe("App shell", () => {
           ]
         });
       }
-      if (command === "save_settings" || command === "save_active_conversation") {
+      if (command === "save_settings" || command === "save_conversation") {
         return Promise.resolve(args);
       }
       return Promise.resolve({});
@@ -180,6 +208,93 @@ describe("App shell", () => {
     expect(screen.queryByRole("heading", { name: "Hello, Alex." })).not.toBeInTheDocument();
   });
 
+  it("lists saved conversations and switches between them", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "list_conversations") {
+        return Promise.resolve([
+          {
+            id: "conversation-1",
+            title: "Portal roadmap",
+            createdAt: "2026-07-15T02:00:00Z",
+            updatedAt: "2026-07-15T02:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 2
+          },
+          {
+            id: "conversation-2",
+            title: "Aether ideas",
+            createdAt: "2026-07-15T01:00:00Z",
+            updatedAt: "2026-07-15T01:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 2
+          }
+        ]);
+      }
+      if (command === "load_conversation") {
+        const { id } = args as { id: string };
+        return Promise.resolve({
+          id,
+          title: id === "conversation-1" ? "Portal roadmap" : "Aether ideas",
+          createdAt: "2026-07-15T02:00:00Z",
+          updatedAt: "2026-07-15T02:05:00Z",
+          activeModel: "llama3.2:latest",
+          metadataJson: "{}",
+          messages: [
+            {
+              id: `${id}-message-1`,
+              conversationId: id,
+              role: "user",
+              content: id === "conversation-1" ? "Open Portal notes" : "Open Aether notes",
+              createdAt: "2026-07-15T02:00:00Z",
+              status: "complete",
+              position: 0,
+              metadataJson: "{}"
+            },
+            {
+              id: `${id}-message-2`,
+              conversationId: id,
+              role: "assistant",
+              content: id === "conversation-1" ? "Portal is loaded." : "Aether is loaded.",
+              createdAt: "2026-07-15T02:01:00Z",
+              status: "complete",
+              position: 1,
+              metadataJson: "{}"
+            }
+          ]
+        });
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText("Portal roadmap")).toBeInTheDocument();
+    expect(screen.getByText("Aether ideas")).toBeInTheDocument();
+    expect(await screen.findByText("Portal is loaded.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open conversation Aether ideas" }));
+
+    expect(await screen.findByText("Aether is loaded.")).toBeInTheDocument();
+    expect(screen.queryByText("Portal is loaded.")).not.toBeInTheDocument();
+  });
+
   it("saves the active conversation after Nova responds", async () => {
     const user = userEvent.setup();
     await renderApp();
@@ -190,7 +305,7 @@ describe("App shell", () => {
     emitStream({ streamId, event: { type: "completed", model: "llama3.2:latest" } });
 
     await waitFor(() => {
-      const saveCall = invokeMock.mock.calls.find(([command]) => command === "save_active_conversation");
+      const saveCall = invokeMock.mock.calls.find(([command]) => command === "save_conversation");
       expect(saveCall).toBeTruthy();
       const payload = saveCall?.[1] as { conversation: { title: string; messages: Array<{ content: string; status: string }> } };
       expect(payload.conversation.title).toBe("Persist this");
@@ -497,7 +612,6 @@ Plain text remains plain.
     expect(screen.getByText("Clear this conversation?")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Clear conversation" }));
 
-    expect(invokeMock).toHaveBeenCalledWith("clear_active_conversation");
     expect(screen.queryByText("Ready to clear.")).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
   });
