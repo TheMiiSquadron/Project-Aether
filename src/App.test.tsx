@@ -260,21 +260,21 @@ describe("App shell", () => {
 
     await renderApp();
 
-    expect(await screen.findByRole("heading", { name: "Nova is almost ready." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Hello, I'm Nova." })).toBeInTheDocument();
     expect(screen.getByText("Step 1 of 8")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(await screen.findByRole("heading", { name: "A calm place to work with Nova." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This is your local workspace." })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(await screen.findByRole("heading", { name: "Nova is almost ready." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Hello, I'm Nova." })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(await screen.findByRole("heading", { name: "A calm place to work with Nova." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "This is your local workspace." })).toBeInTheDocument();
 
     for (let step = 0; step < 6; step += 1) {
       await user.click(screen.getByRole("button", { name: "Next" }));
     }
 
-    expect(await screen.findByRole("heading", { name: "You are ready to open Aether." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "You're ready." })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Finish" }));
 
     expect(await screen.findByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
@@ -289,7 +289,7 @@ describe("App shell", () => {
     await renderApp();
 
     expect(await screen.findByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Nova is almost ready." })).not.toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Hello, I'm Nova." })).not.toBeInTheDocument();
   });
 
   it("runs the welcome flow again from settings", async () => {
@@ -299,7 +299,7 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "Settings" }));
     await user.click(screen.getByRole("button", { name: "Run Welcome Again..." }));
 
-    expect(await screen.findByRole("heading", { name: "Nova is almost ready." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Hello, I'm Nova." })).toBeInTheDocument();
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("save_settings", {
         settings: expect.objectContaining({ firstRun: true })

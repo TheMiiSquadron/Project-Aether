@@ -157,57 +157,57 @@ const onboardingSteps = [
   {
     id: "splash",
     eyebrow: "Project Aether",
-    title: "Nova is almost ready.",
-    body: "A short guided setup will prepare the local conversation space before you begin.",
+    title: "Hello, I'm Nova.",
+    body: "I'll guide you through a short welcome so Aether feels familiar before we begin.",
     status: "Welcome experience"
   },
   {
     id: "welcome",
-    eyebrow: "Welcome",
-    title: "A calm place to work with Nova.",
-    body: "Aether keeps the conversation first: local, focused, and built to grow carefully over time.",
+    eyebrow: "Aether",
+    title: "This is your local workspace.",
+    body: "Aether is designed to keep our conversations focused, private, and easy to return to.",
     status: "Orientation"
   },
   {
     id: "system-check",
     eyebrow: "System Check",
-    title: "System readiness will appear here.",
-    body: "This placeholder will later confirm local runtime readiness without leaving the main Aether window.",
+    title: "I'll check the basics here soon.",
+    body: "For now, this step is only a placeholder. A later pass will verify local readiness without leaving Aether.",
     status: "Placeholder"
   },
   {
     id: "ollama",
     eyebrow: "Ollama",
-    title: "Ollama setup will appear here.",
-    body: "Future work will guide model-provider setup. This phase does not install or download anything.",
+    title: "I'll help with Ollama here later.",
+    body: "This phase does not install, download, or change anything. It simply reserves the place where local model setup guidance will live.",
     status: "Placeholder"
   },
   {
     id: "model-selection",
     eyebrow: "Model Selection",
-    title: "Model choice will appear here.",
-    body: "A later pass will help choose an installed local model. For now, your existing model setting stays untouched.",
+    title: "We'll choose a model here later.",
+    body: "When this step becomes active, I'll help you pick from installed local models. Today, your current model setting stays untouched.",
     status: "Placeholder"
   },
   {
     id: "personalization",
     eyebrow: "Personalization",
-    title: "Personal touches will appear here.",
-    body: "Future options can tune the first-run experience while preserving Aether's quiet visual style.",
+    title: "A few preferences will go here.",
+    body: "Future options can tune the first-run experience. I'll keep them simple and explain what each one changes.",
     status: "Placeholder"
   },
   {
     id: "features",
     eyebrow: "Features",
-    title: "Aether's feature tour will appear here.",
-    body: "This step will later introduce conversation history, Markdown, export, and search at the right pace.",
+    title: "I'll show what Aether can do.",
+    body: "This step will later introduce conversation history, Markdown, export, and search without turning setup into a lecture.",
     status: "Placeholder"
   },
   {
     id: "finish",
     eyebrow: "Finish",
-    title: "You are ready to open Aether.",
-    body: "Finish the welcome flow to enter the normal Nova conversation experience.",
+    title: "You're ready.",
+    body: "Finish the welcome flow and we'll open the normal conversation view.",
     status: "Complete"
   }
 ] as const;
@@ -347,7 +347,11 @@ export function App() {
 
   useEffect(() => {
     if (settingsReady && !settings.firstRun) {
-      window.requestAnimationFrame(() => composerRef.current?.focus());
+      window.requestAnimationFrame(() => {
+        if (document.activeElement === document.body) {
+          composerRef.current?.focus();
+        }
+      });
     }
   }, [settingsReady, settings.firstRun]);
 
