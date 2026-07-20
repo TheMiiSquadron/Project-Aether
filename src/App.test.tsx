@@ -104,6 +104,10 @@ describe("App shell", () => {
         return Promise.resolve([]);
       }
 
+      if (command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+
       if (command === "load_conversation") {
         return Promise.resolve(null);
       }
@@ -310,6 +314,224 @@ describe("App shell", () => {
 
     expect(await screen.findByText("Aether is loaded.")).toBeInTheDocument();
     expect(screen.queryByText("Portal is loaded.")).not.toBeInTheDocument();
+  });
+
+  it("searches conversations and restores the recent list for an empty query", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "list_conversations") {
+        return Promise.resolve([
+          {
+            id: "recent-chat",
+            title: "Recent chat",
+            createdAt: "2026-07-15T03:00:00Z",
+            updatedAt: "2026-07-15T03:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 1
+          }
+        ]);
+      }
+      if (command === "search_conversations") {
+        return Promise.resolve([
+          {
+            id: "search-result",
+            title: "Search result",
+            createdAt: "2026-07-15T02:00:00Z",
+            updatedAt: "2026-07-15T02:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 1
+          }
+        ]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText("Recent chat")).toBeInTheDocument();
+
+    const searchInput = screen.getByRole("searchbox", { name: "Search conversations" });
+    await user.type(searchInput, "needle");
+
+    expect(await screen.findByText("Search result")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("search_conversations", { query: "needle" });
+
+    await user.clear(searchInput);
+
+    expect(await screen.findByText("Recent chat")).toBeInTheDocument();
+  });
+
+  it("treats whitespace-only search as the normal recent list", async () => {
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "list_conversations") {
+        return Promise.resolve([
+          {
+            id: "recent-chat",
+            title: "Recent chat",
+            createdAt: "2026-07-15T03:00:00Z",
+            updatedAt: "2026-07-15T03:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 1
+          }
+        ]);
+      }
+      if (command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+    invokeMock.mockClear();
+
+    fireEvent.change(screen.getByRole("searchbox", { name: "Search conversations" }), {
+      target: { value: "   " }
+    });
+
+    await waitFor(() => {
+      expect(invokeMock.mock.calls.some(([command]) => command === "list_conversations")).toBe(true);
+    });
+    expect(invokeMock.mock.calls.some(([command]) => command === "search_conversations")).toBe(false);
+    expect(await screen.findByText("Recent chat")).toBeInTheDocument();
+  });
+
+  it("shows a quiet no-results state for conversation search", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search conversations" }), "missing");
+
+    expect(await screen.findByText("No conversations found.")).toBeInTheDocument();
+    expect(screen.queryByText("Saved conversations will appear here.")).not.toBeInTheDocument();
+  });
+
+  it("preserves the selected conversation while filtering search results", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "list_conversations") {
+        return Promise.resolve([
+          {
+            id: "first",
+            title: "First conversation",
+            createdAt: "2026-07-15T03:00:00Z",
+            updatedAt: "2026-07-15T03:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 1
+          },
+          {
+            id: "second",
+            title: "Second conversation",
+            createdAt: "2026-07-15T02:00:00Z",
+            updatedAt: "2026-07-15T02:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 1
+          }
+        ]);
+      }
+      if (command === "search_conversations") {
+        return Promise.resolve([
+          {
+            id: "second",
+            title: "Second conversation",
+            createdAt: "2026-07-15T02:00:00Z",
+            updatedAt: "2026-07-15T02:05:00Z",
+            activeModel: "llama3.2:latest",
+            messageCount: 1
+          }
+        ]);
+      }
+      if (command === "load_conversation") {
+        const { id } = args as { id: string };
+        return Promise.resolve({
+          id,
+          title: id === "first" ? "First conversation" : "Second conversation",
+          createdAt: "2026-07-15T02:00:00Z",
+          updatedAt: "2026-07-15T02:05:00Z",
+          activeModel: "llama3.2:latest",
+          metadataJson: "{}",
+          messages: [
+            {
+              id: `${id}-message-1`,
+              conversationId: id,
+              role: "assistant",
+              content: id === "first" ? "First stays loaded." : "Second is now loaded.",
+              createdAt: "2026-07-15T02:00:00Z",
+              status: "complete",
+              position: 0,
+              metadataJson: "{}"
+            }
+          ]
+        });
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+
+    expect(await screen.findByText("First stays loaded.")).toBeInTheDocument();
+
+    await user.type(screen.getByRole("searchbox", { name: "Search conversations" }), "second");
+
+    expect(await screen.findByText("Second conversation")).toBeInTheDocument();
+    expect(screen.getByText("First stays loaded.")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Open conversation Second conversation" }));
+
+    expect(await screen.findByText("Second is now loaded.")).toBeInTheDocument();
   });
 
   it("renames a saved conversation from the sidebar", async () => {

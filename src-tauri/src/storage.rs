@@ -322,6 +322,51 @@ impl ConversationStore {
         rows.collect()
     }
 
+    pub fn search_conversations(&self, query: &str) -> rusqlite::Result<Vec<ConversationSummary>> {
+        let query = query.trim();
+        if query.is_empty() {
+            return self.list_conversations();
+        }
+
+        let pattern = like_contains_pattern(query);
+        let mut statement = self.connection.prepare(
+            "
+            SELECT
+                conversations.id,
+                conversations.title,
+                conversations.created_at,
+                conversations.updated_at,
+                conversations.active_model,
+                COUNT(messages.id) AS message_count
+            FROM conversations
+            LEFT JOIN messages ON messages.conversation_id = conversations.id
+            WHERE conversations.title COLLATE NOCASE LIKE ?1 ESCAPE '\\'
+                OR EXISTS (
+                    SELECT 1
+                    FROM messages AS search_messages
+                    WHERE search_messages.conversation_id = conversations.id
+                        AND search_messages.content COLLATE NOCASE LIKE ?1 ESCAPE '\\'
+                )
+            GROUP BY conversations.id
+            ORDER BY conversations.updated_at DESC
+            ",
+        )?;
+
+        let rows = statement.query_map(params![pattern], |row| {
+            let message_count: i64 = row.get(5)?;
+            Ok(ConversationSummary {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                created_at: row.get(2)?,
+                updated_at: row.get(3)?,
+                active_model: row.get(4)?,
+                message_count: message_count.max(0) as u32,
+            })
+        })?;
+
+        rows.collect()
+    }
+
     fn load_messages(&self, conversation_id: &str) -> rusqlite::Result<Vec<StoredMessage>> {
         let mut statement = self.connection.prepare(
             "
@@ -349,6 +394,19 @@ impl ConversationStore {
 
         rows.collect()
     }
+}
+
+fn like_contains_pattern(query: &str) -> String {
+    let mut escaped = String::with_capacity(query.len() + 2);
+    escaped.push('%');
+    for character in query.chars() {
+        if matches!(character, '%' | '_' | '\\') {
+            escaped.push('\\');
+        }
+        escaped.push(character);
+    }
+    escaped.push('%');
+    escaped
 }
 
 #[cfg(test)]
@@ -385,6 +443,40 @@ mod tests {
                     metadata_json: r#"{"cancelled":true}"#.to_string(),
                 },
             ],
+        }
+    }
+
+    fn conversation_with(
+        id: &str,
+        title: &str,
+        updated_at: &str,
+        message_contents: &[&str],
+    ) -> StoredConversation {
+        StoredConversation {
+            id: id.to_string(),
+            title: title.to_string(),
+            created_at: "2026-07-15T02:00:00Z".to_string(),
+            updated_at: updated_at.to_string(),
+            active_model: Some("qwen3:8b".to_string()),
+            metadata_json: "{}".to_string(),
+            messages: message_contents
+                .iter()
+                .enumerate()
+                .map(|(index, content)| StoredMessage {
+                    id: format!("{id}-message-{index}"),
+                    conversation_id: id.to_string(),
+                    role: if index % 2 == 0 {
+                        MessageRole::User
+                    } else {
+                        MessageRole::Assistant
+                    },
+                    content: (*content).to_string(),
+                    created_at: format!("2026-07-15T02:0{index}:00Z"),
+                    status: MessageStatus::Complete,
+                    position: index as u32,
+                    metadata_json: "{}".to_string(),
+                })
+                .collect(),
         }
     }
 
@@ -447,6 +539,212 @@ mod tests {
         assert_eq!(summaries[0].id, "newer");
         assert_eq!(summaries[0].message_count, 2);
         assert_eq!(summaries[1].id, "older");
+    }
+
+    #[test]
+    fn searches_conversations_by_title() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "aether",
+                "Aether planning",
+                "2026-07-15T03:00:00Z",
+                &["Storage notes"],
+            ))
+            .expect("aether saves");
+        store
+            .save_conversation(&conversation_with(
+                "other",
+                "Garden notes",
+                "2026-07-15T04:00:00Z",
+                &["Unrelated"],
+            ))
+            .expect("other saves");
+
+        let summaries = store
+            .search_conversations("Aether")
+            .expect("search succeeds");
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, "aether");
+    }
+
+    #[test]
+    fn searches_conversations_by_message_content() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "matching",
+                "Planning",
+                "2026-07-15T03:00:00Z",
+                &["We need local search for history."],
+            ))
+            .expect("matching saves");
+        store
+            .save_conversation(&conversation_with(
+                "other",
+                "Storage",
+                "2026-07-15T04:00:00Z",
+                &["No matching content here."],
+            ))
+            .expect("other saves");
+
+        let summaries = store
+            .search_conversations("local search")
+            .expect("search succeeds");
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, "matching");
+    }
+
+    #[test]
+    fn searches_case_insensitively() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "mixed-case",
+                "Markdown Polish",
+                "2026-07-15T03:00:00Z",
+                &["Syntax highlighting"],
+            ))
+            .expect("conversation saves");
+
+        let summaries = store
+            .search_conversations("markdown polish")
+            .expect("search succeeds");
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, "mixed-case");
+    }
+
+    #[test]
+    fn search_returns_duplicate_message_matches_once() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "duplicates",
+                "Search notes",
+                "2026-07-15T03:00:00Z",
+                &["search appears here", "search appears again"],
+            ))
+            .expect("conversation saves");
+
+        let summaries = store
+            .search_conversations("search")
+            .expect("search succeeds");
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, "duplicates");
+        assert_eq!(summaries[0].message_count, 2);
+    }
+
+    #[test]
+    fn empty_search_restores_recent_conversations() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "older",
+                "Older",
+                "2026-07-15T01:00:00Z",
+                &["Old"],
+            ))
+            .expect("older saves");
+        store
+            .save_conversation(&conversation_with(
+                "newer",
+                "Newer",
+                "2026-07-15T03:00:00Z",
+                &["New"],
+            ))
+            .expect("newer saves");
+
+        let summaries = store.search_conversations("").expect("search succeeds");
+
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].id, "newer");
+        assert_eq!(summaries[1].id, "older");
+    }
+
+    #[test]
+    fn whitespace_only_search_restores_recent_conversations() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "conversation",
+                "Conversation",
+                "2026-07-15T03:00:00Z",
+                &["Content"],
+            ))
+            .expect("conversation saves");
+
+        let summaries = store
+            .search_conversations("   \n\t")
+            .expect("search succeeds");
+
+        assert_eq!(summaries.len(), 1);
+        assert_eq!(summaries[0].id, "conversation");
+    }
+
+    #[test]
+    fn search_orders_results_by_recent_update() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "older",
+                "Search topic older",
+                "2026-07-15T01:00:00Z",
+                &["match"],
+            ))
+            .expect("older saves");
+        store
+            .save_conversation(&conversation_with(
+                "newer",
+                "Search topic newer",
+                "2026-07-15T04:00:00Z",
+                &["match"],
+            ))
+            .expect("newer saves");
+
+        let summaries = store
+            .search_conversations("search topic")
+            .expect("search succeeds");
+
+        assert_eq!(summaries.len(), 2);
+        assert_eq!(summaries[0].id, "newer");
+        assert_eq!(summaries[1].id, "older");
+    }
+
+    #[test]
+    fn search_handles_sql_wildcards_and_quotes_safely() {
+        let mut store = ConversationStore::in_memory().expect("store opens");
+        store
+            .save_conversation(&conversation_with(
+                "literal",
+                "Literal 100%_done",
+                "2026-07-15T04:00:00Z",
+                &["Quote test: don't widen this"],
+            ))
+            .expect("literal saves");
+        store
+            .save_conversation(&conversation_with(
+                "would-match-wildcard",
+                "Literal 1000done",
+                "2026-07-15T05:00:00Z",
+                &["No quoted phrase"],
+            ))
+            .expect("wildcard candidate saves");
+
+        let wildcard_summaries = store
+            .search_conversations("100%_done")
+            .expect("search succeeds");
+        let quote_summaries = store
+            .search_conversations("don't")
+            .expect("search succeeds");
+
+        assert_eq!(wildcard_summaries.len(), 1);
+        assert_eq!(wildcard_summaries[0].id, "literal");
+        assert_eq!(quote_summaries.len(), 1);
+        assert_eq!(quote_summaries[0].id, "literal");
     }
 
     #[test]

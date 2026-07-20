@@ -12,6 +12,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  Search,
   Send,
   Settings,
   Square,
@@ -189,6 +190,8 @@ export function App() {
   const activeConversationIdRef = useRef<string | null>(null);
   const activeConversationCreatedAtRef = useRef<string | null>(null);
   const activeConversationTitleRef = useRef<string | null>(null);
+  const historySearchQueryRef = useRef("");
+  const historyRefreshSequenceRef = useRef(0);
   const conversationSaveTimeoutRef = useRef<number | null>(null);
   const activeConversationSaveRef = useRef<Promise<unknown> | null>(null);
   const skipNextConversationSaveRef = useRef(false);
@@ -204,6 +207,7 @@ export function App() {
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [conversationSummaries, setConversationSummaries] = useState<ConversationSummary[]>([]);
+  const [historySearchQuery, setHistorySearchQuery] = useState("");
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [renameConversationId, setRenameConversationId] = useState<string | null>(null);
   const [renameDraft, setRenameDraft] = useState("");
@@ -336,13 +340,27 @@ export function App() {
     }
   }
 
-  async function refreshConversationSummaries() {
+  async function refreshConversationSummaries(query = historySearchQueryRef.current) {
+    const refreshSequence = historyRefreshSequenceRef.current + 1;
+    historyRefreshSequenceRef.current = refreshSequence;
     try {
-      const summaries = await invoke<ConversationSummary[]>("list_conversations");
-      setConversationSummaries(summaries);
+      const trimmedQuery = query.trim();
+      const summaries = trimmedQuery
+        ? await invoke<ConversationSummary[]>("search_conversations", { query: trimmedQuery })
+        : await invoke<ConversationSummary[]>("list_conversations");
+      if (historyRefreshSequenceRef.current === refreshSequence && historySearchQueryRef.current === query) {
+        setConversationSummaries(summaries);
+      }
     } catch (caughtError) {
       setError(normalizeStorageError(caughtError));
     }
+  }
+
+  function handleHistorySearchChange(event: ChangeEvent<HTMLInputElement>) {
+    const query = event.target.value;
+    historySearchQueryRef.current = query;
+    setHistorySearchQuery(query);
+    void refreshConversationSummaries(query);
   }
 
   async function loadConversationById(id: string) {
@@ -794,6 +812,17 @@ export function App() {
           </button>
         </div>
 
+        <label className="history-search">
+          <Search size={15} aria-hidden="true" />
+          <input
+            type="search"
+            value={historySearchQuery}
+            onChange={handleHistorySearchChange}
+            placeholder="Search conversations"
+            aria-label="Search conversations"
+          />
+        </label>
+
         <div className="history-list" aria-busy={historyLoading}>
           {conversationSummaries.length ? (
             conversationSummaries.map((summary) => (
@@ -863,7 +892,9 @@ export function App() {
               </div>
             ))
           ) : (
-            <p className="history-empty">Saved conversations will appear here.</p>
+            <p className="history-empty">
+              {historySearchQuery.trim() ? "No conversations found." : "Saved conversations will appear here."}
+            </p>
           )}
         </div>
       </aside>

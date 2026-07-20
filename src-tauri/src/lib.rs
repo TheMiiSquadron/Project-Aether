@@ -80,6 +80,14 @@ fn list_conversations(app: AppHandle) -> Result<Vec<ConversationSummary>, String
 }
 
 #[tauri::command]
+fn search_conversations(app: AppHandle, query: String) -> Result<Vec<ConversationSummary>, String> {
+    let store = open_conversation_store(&app)?;
+    store
+        .search_conversations(&query)
+        .map_err(|error| format!("Could not search Aether conversations: {error}"))
+}
+
+#[tauri::command]
 fn load_conversation(app: AppHandle, id: String) -> Result<Option<StoredConversation>, String> {
     let store = open_conversation_store(&app)?;
     store
@@ -184,6 +192,7 @@ pub fn run() {
             save_settings,
             load_active_conversation,
             list_conversations,
+            search_conversations,
             load_conversation,
             save_conversation,
             delete_conversation,
