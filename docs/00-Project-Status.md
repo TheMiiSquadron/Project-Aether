@@ -1,11 +1,11 @@
 # Project Status
 
 **Status:** Living Document
-**Current Phase:** v0.2 Release-Candidate Validation
-**Current Status:** v0.2.0-0 feature complete after the v0.1.0 release
-**Current Target:** v0.2.0
-**Last Completed Milestone:** Basic local conversation search
-**Next Milestone:** v0.2.0 release-candidate blocker review
+**Current Phase:** v0.2 Released
+**Current Status:** v0.2.0 released after Windows/Envy validation
+**Current Target:** v0.2.1 planning
+**Last Completed Milestone:** v0.2.0 conversation history release
+**Next Milestone:** v0.2.1 planning
 
 Project Aether is being developed design-first. The v0.1 experience, architecture, responsibilities, data model, event model, settings, and UI direction were validated before code was scaffolded.
 
@@ -23,11 +23,11 @@ Nova's initial identity layer lives in `prompts/nova-system-prompt.md`. The Conv
 
 Aether now discovers installed Ollama models, allows selecting the active model, renders Markdown and code blocks, supports one user-selected UTF-8 text/code attachment up to 1 MB, persists implemented v0.1 settings, shows friendly provider errors, and keeps diagnostics limited to Developer Mode.
 
-Memory, tools, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.2. Conversation history and persistence are now in v0.2 release-candidate validation.
+Memory, tools, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.2. Conversation history and persistence shipped in v0.2.0.
 
-Release notes are prepared in [Release Notes v0.1.0](Release-Notes-v0.1.0.md). The v0.1.0 release checklist is complete after macOS/Orion validation, Windows/Envy validation, and final release tagging.
+Release notes are prepared in [Release Notes v0.1.0](Release-Notes-v0.1.0.md) and [Release Notes v0.2.0](Release-Notes-v0.2.0.md). The v0.2.0 release checklist is complete after Windows/Envy validation and final release tagging.
 
-Since v0.1.0, Aether has added the v0.2 implementation pieces: a SQLite-backed conversation storage layer, schema versioning, structured saved conversation/message types, active conversation load/save commands, automatic active conversation persistence in the UI, a conversation sidebar, new chat, conversation switching, rename/delete flows, upgraded GFM rendering, current conversation Markdown export, and basic local conversation search.
+Since v0.1.0, Aether has shipped the v0.2 implementation pieces: a SQLite-backed conversation storage layer, schema versioning, structured saved conversation/message types, active conversation load/save commands, automatic active conversation persistence in the UI, a conversation sidebar, new chat, conversation switching, rename/delete flows, upgraded GFM rendering, current conversation Markdown export, and basic local conversation search.
 
 NOVA remains the intended high-performance runtime for larger-model, GPU, and long-session validation after the v0.1 release. It is not required to validate the v0.1 Windows app build.
 

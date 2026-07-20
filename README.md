@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: v0.2.0-0 feature complete and in release-candidate validation after the v0.1.0 release validated on macOS/Orion and Windows/Envy.
+Status: v0.2.0 released after validation on Windows/Envy.
 
 ## Development
 
@@ -36,7 +36,7 @@ cd src-tauri && cargo fmt --check
 npm run tauri -- build
 ```
 
-The current implementation uses the frozen v0.1 streaming request path plus the first v0.2 persistence foundation:
+The current implementation uses the frozen v0.1 streaming request path plus the v0.2 persistence foundation:
 
 ```text
 UI -> Conversation Engine -> Model Provider -> Ollama provider
@@ -50,7 +50,7 @@ Streaming responses are delivered from Rust to the React UI as normalized conver
 
 The v0.1 app includes Markdown rendering, code blocks with copy actions, user-initiated text/code attachments, persisted settings, friendly provider errors, and the frozen Nova conversation shell.
 
-The current v0.2 alpha work adds SQLite-backed conversation storage, multiple saved conversations, a conversation sidebar, new chat, conversation switching, rename/delete flows, Markdown export, upgraded GFM rendering, and basic local conversation search.
+The v0.2 release adds SQLite-backed conversation storage, multiple saved conversations, a conversation sidebar, new chat, conversation switching, rename/delete flows, Markdown export, upgraded GFM rendering, and basic local conversation search.
 
 ## Documentation
 
@@ -72,5 +72,6 @@ The current v0.2 alpha work adds SQLite-backed conversation storage, multiple sa
 * [Future Device Platform Vision](docs/15-Future-Device-Platform-Vision.md)
 * [Architecture Freeze Review v0.1](docs/Architecture-Freeze-Review-v0.1.md)
 * [Release Notes v0.1.0](docs/Release-Notes-v0.1.0.md)
+* [Release Notes v0.2.0](docs/Release-Notes-v0.2.0.md)
 
 The original living design document has been split into focused documentation files. Existing links can still start from [Project Aether - 'Nova' AI.md](Project%20Aether%20-%20'Nova'%20AI.md).
