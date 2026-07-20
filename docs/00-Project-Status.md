@@ -2,7 +2,7 @@
 
 **Status:** Living Document
 **Current Phase:** v0.2 Implementation
-**Current Status:** v0.2.0-alpha.0 in active development after the v0.1.0 release
+**Current Status:** v0.2.0-0 in active development after the v0.1.0 release
 **Current Target:** v0.2.0
 **Last Completed Milestone:** Active conversation persistence foundation
 **Next Milestone:** Conversation sidebar with multiple saved conversations

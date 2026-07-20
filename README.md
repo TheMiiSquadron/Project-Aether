@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: v0.2.0-alpha.0 in active development after the v0.1.0 release validated on macOS/Orion and Windows/Envy.
+Status: v0.2.0-0 in active development after the v0.1.0 release validated on macOS/Orion and Windows/Envy.
 
 ## Development
 
