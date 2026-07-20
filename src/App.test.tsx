@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { markdownShowcase } from "./MarkdownShowcase";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
@@ -585,48 +586,7 @@ describe("App shell", () => {
       streamId,
       event: {
         type: "chunk",
-        content: `# Simple Markdown File
-
-This paragraph includes **bold text**, \`inline code\`, and [a link](https://example.com).
-
-- First item
-- Second item
-
-1. Ordered one
-2. Ordered two
-
-> Quoted content should stand apart.
-
-| Name | Role |
-| --- | --- |
-| Nova | Assistant |
-
-\`\`\`ts
-const name = "Nova";
-function greet() {
-  return name;
-}
-\`\`\`
-
-\`\`\`markdown
-# Generated Markdown
-
-- Copyable source
-\`\`\`
-
-\`\`\`json
-{ "name": "Nova" }
-\`\`\`
-
-\`\`\`rust
-fn main() {
-  println!("Nova");
-}
-\`\`\`
-
-\`\`\`
-Plain text remains plain.
-\`\`\``
+        content: markdownShowcase
       }
     });
     emitStream({
@@ -634,19 +594,58 @@ Plain text remains plain.
       event: { type: "completed", model: "llama3.2:latest" }
     });
 
-    expect(await screen.findByRole("heading", { name: "Simple Markdown File" })).toBeInTheDocument();
-    expect(screen.getByText("First item")).toBeInTheDocument();
-    expect(screen.getByText("Ordered two")).toBeInTheDocument();
-    expect(screen.getByText("Quoted content should stand apart.")).toBeInTheDocument();
-    expect(screen.getByRole("cell", { name: "Assistant" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Heading 1" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Heading 6" })).toBeInTheDocument();
+    expect(screen.getByText("bold")).toBeInTheDocument();
+    expect(screen.getByText("italic")).toBeInTheDocument();
+    expect(screen.getByText("bold italic")).toBeInTheDocument();
+    expect(screen.getByText("strikethrough")).toBeInTheDocument();
+    expect(screen.getAllByText("inline code")).toHaveLength(2);
+    expect(screen.getByRole("link", { name: "https://example.com/aether" })).toHaveAttribute(
+      "href",
+      "https://example.com/aether"
+    );
+    expect(screen.getByRole("link", { name: "Named link" })).toHaveAttribute("href", "https://example.com/named");
+    expect(screen.getByRole("img", { name: "Aether placeholder image" })).toHaveAttribute(
+      "src",
+      "https://example.com/aether.png"
+    );
+    expect(screen.getByText("A blockquote should carry the theme accent.")).toBeInTheDocument();
+    expect(screen.getByText("Unordered item")).toBeInTheDocument();
+    expect(screen.getByText("Nested ordered item")).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Completed task/i })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: /Open task/i })).not.toBeChecked();
+    expect(screen.getByRole("cell", { name: "Native-looking checkboxes." })).toBeInTheDocument();
     expect(await screen.findByText("typescript")).toBeInTheDocument();
-    expect(screen.getByText("markdown")).toBeInTheDocument();
     expect(screen.getByText("json")).toBeInTheDocument();
     expect(screen.getByText("rust")).toBeInTheDocument();
+    expect(screen.getByText("python")).toBeInTheDocument();
+    expect(screen.getByText("bash")).toBeInTheDocument();
     expect(screen.getByText("text")).toBeInTheDocument();
     const copyButtons = screen.getAllByRole("button", { name: "Copy code" });
-    expect(copyButtons).toHaveLength(5);
+    expect(copyButtons).toHaveLength(6);
 
+  });
+
+  it("renders an unfinished streaming code fence without waiting for completion", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+
+    await user.type(screen.getByLabelText("Message Nova"), "Stream code");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    const streamId = latestStreamId();
+
+    emitStream({
+      streamId,
+      event: {
+        type: "chunk",
+        content: "```ts\nconst value = 42;"
+      }
+    });
+
+    expect(await screen.findByText("typescript")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy code" })).toBeInTheDocument();
+    expect(screen.getByText(/const/)).toBeInTheDocument();
   });
 
   it("adds one UTF-8 text attachment to the submitted message context", async () => {

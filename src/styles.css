@@ -861,6 +861,7 @@ textarea:focus-visible {
   flex-direction: column;
   gap: 1.15rem;
   width: min(100%, 48rem);
+  min-width: 0;
   margin: 0 auto;
   padding: 0.4rem 0 1.5rem;
 }
@@ -868,6 +869,7 @@ textarea:focus-visible {
 .message-row {
   display: grid;
   gap: 0.42rem;
+  min-width: 0;
 }
 
 .message-row--user {
@@ -885,7 +887,9 @@ textarea:focus-visible {
 }
 
 .message-card {
+  width: fit-content;
   max-width: min(100%, 38rem);
+  min-width: 0;
   padding: 0.88rem 1rem;
   border: 1px solid var(--control-border);
   border-radius: 18px;
@@ -898,8 +902,8 @@ textarea:focus-visible {
 .message-row--assistant .message-card {
   border-color: transparent;
   background: transparent;
-  width: min(100%, 44rem);
-  max-width: min(100%, 44rem);
+  width: min(100%, 35rem);
+  max-width: min(100%, 35rem);
   padding-right: 0;
   padding-left: 0;
 }
@@ -983,20 +987,24 @@ textarea:focus-visible {
 .markdown-message {
   display: grid;
   gap: 0.95rem;
-  width: min(100%, 42rem);
+  width: 100%;
+  max-width: 100%;
   min-width: 0;
   color: var(--secondary-text);
   line-height: 1.68;
 }
 
 .markdown-message > * {
+  min-width: 0;
   margin: 0;
 }
 
 .markdown-message h1,
 .markdown-message h2,
 .markdown-message h3,
-.markdown-message h4 {
+.markdown-message h4,
+.markdown-message h5,
+.markdown-message h6 {
   color: var(--primary-text);
   font-weight: 780;
   letter-spacing: 0;
@@ -1029,14 +1037,32 @@ textarea:focus-visible {
   text-transform: none;
 }
 
+.markdown-message h5 {
+  color: var(--model-text);
+  font-size: 0.98em;
+}
+
+.markdown-message h6 {
+  color: var(--muted-text);
+  font-size: 0.9em;
+}
+
 .markdown-message p {
   color: var(--secondary-text);
   white-space: pre-wrap;
 }
 
+.markdown-message em {
+  color: var(--secondary-text);
+}
+
 .markdown-message strong {
   color: var(--primary-text);
   font-weight: 760;
+}
+
+.markdown-message del {
+  color: var(--muted-text);
 }
 
 .markdown-message a {
@@ -1061,6 +1087,10 @@ textarea:focus-visible {
   line-height: 1.64;
 }
 
+.markdown-message blockquote > * + * {
+  margin-top: 0.55rem;
+}
+
 .markdown-message ul,
 .markdown-message ol {
   display: grid;
@@ -1078,6 +1108,34 @@ textarea:focus-visible {
   font-weight: 750;
 }
 
+.markdown-message input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  margin: 0 0.42rem 0 -1.35rem;
+  accent-color: var(--accent-background);
+  vertical-align: -0.16rem;
+}
+
+.markdown-message .contains-task-list {
+  padding-left: 1.6rem;
+  list-style: none;
+}
+
+.markdown-message .task-list-item {
+  padding-left: 0;
+}
+
+.task-list-label {
+  display: inline;
+}
+
+.markdown-message hr {
+  width: 100%;
+  height: 1px;
+  border: 0;
+  background: var(--header-border);
+}
+
 .markdown-message code:not(.code-block code) {
   padding: 0.14rem 0.38rem;
   border: 1px solid var(--code-border);
@@ -1090,7 +1148,9 @@ textarea:focus-visible {
 }
 
 .markdown-table-wrap {
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   overflow-x: auto;
   border: 1px solid var(--code-border);
   border-radius: 14px;
@@ -1127,8 +1187,26 @@ textarea:focus-visible {
   background: color-mix(in srgb, var(--control-background) 36%, transparent);
 }
 
-.code-block {
+.markdown-image-wrap {
+  display: block;
   max-width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--control-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--control-background) 50%, transparent);
+}
+
+.markdown-image-wrap img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+.code-block {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
   overflow: hidden;
   border: 1px solid var(--code-border);
   border-radius: 16px;
@@ -1180,22 +1258,30 @@ textarea:focus-visible {
 }
 
 .code-block pre {
+  width: 100%;
   max-width: 100%;
+  min-width: 0;
   margin: 0;
   overflow-x: auto;
   padding: 0.9rem 1rem;
+  background: #0d1117;
 }
 
 .code-block code {
+  display: block;
+  width: max-content;
+  min-width: 100%;
   font-family: "SFMono-Regular", "Cascadia Code", Consolas, monospace;
   font-size: 0.84em;
   line-height: 1.62;
   white-space: pre;
 }
 
-.code-keyword {
-  color: var(--code-keyword);
-  font-weight: 760;
+.code-block .hljs {
+  padding: 0;
+  overflow: visible;
+  background: transparent;
+  color: #c9d1d9;
 }
 
 .settings-backdrop {
