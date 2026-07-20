@@ -196,6 +196,13 @@ async function openModelSelectionStep(user: ReturnType<typeof userEvent.setup>) 
   expect(await screen.findByRole("heading", { name: "Let's choose your first model." })).toBeInTheDocument();
 }
 
+async function openPersonalizationStep(user: ReturnType<typeof userEvent.setup>) {
+  await openModelSelectionStep(user);
+  expect(await screen.findByText("Model Ready")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  expect(await screen.findByRole("heading", { name: "Let's make Aether feel like yours." })).toBeInTheDocument();
+}
+
 describe("App shell", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -452,7 +459,7 @@ describe("App shell", () => {
     expect(await screen.findByRole("heading", { name: "You're ready." })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Finish" }));
 
-    expect(await screen.findByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Hello." })).toBeInTheDocument();
     await waitFor(() => {
       expect(invokeMock).toHaveBeenCalledWith("save_settings", {
         settings: expect.objectContaining({ firstRun: false })
@@ -844,11 +851,6 @@ describe("App shell", () => {
 
     expect(await screen.findByText("Model Ready")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "llama3.2:latest" }));
-    await waitFor(() => {
-      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
-        settings: expect.objectContaining({ selectedModel: "llama3.2:latest" })
-      });
-    });
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
@@ -1106,10 +1108,206 @@ describe("App shell", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
+  it("shows personalization defaults and allows a blank user name", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+
+    expect(screen.getByLabelText("What should I call you?")).toHaveValue("");
+    expect(screen.getByLabelText("What would you like to call me?")).toHaveValue("Nova");
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({
+          userDisplayName: "",
+          assistantDisplayName: "Nova"
+        })
+      });
+    });
+  });
+
+  it("persists trimmed custom personalization values", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+    await user.type(screen.getByLabelText("What should I call you?"), "  Alex  ");
+    await user.clear(screen.getByLabelText("What would you like to call me?"));
+    await user.type(screen.getByLabelText("What would you like to call me?"), "  Nova Prime  ");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({
+          userDisplayName: "Alex",
+          assistantDisplayName: "Nova Prime"
+        })
+      });
+    });
+  });
+
+  it("accepts Unicode personalization values", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+    await user.type(screen.getByLabelText("What should I call you?"), "Míra 🌙");
+    await user.clear(screen.getByLabelText("What would you like to call me?"));
+    await user.type(screen.getByLabelText("What would you like to call me?"), "Νόβα");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({
+          userDisplayName: "Míra 🌙",
+          assistantDisplayName: "Νόβα"
+        })
+      });
+    });
+  });
+
+  it("blocks continuing with an empty assistant name", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+    await user.clear(screen.getByLabelText("What would you like to call me?"));
+
+    expect(await screen.findByText("Please choose a name for the assistant.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  it("limits personalization field lengths", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+    const longName = "A".repeat(80);
+
+    await openPersonalizationStep(user);
+    await user.type(screen.getByLabelText("What should I call you?"), longName);
+
+    expect(screen.getByLabelText("What should I call you?")).toHaveValue("A".repeat(48));
+  });
+
+  it("previews theme changes immediately during personalization", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+    await user.click(screen.getByRole("button", { name: "Observatory" }));
+
+    expect(screen.getByLabelText("Aether")).toHaveAttribute("data-theme", "observatory");
+  });
+
+  it("preserves personalization drafts when navigating back and forward", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+    await user.type(screen.getByLabelText("What should I call you?"), "Sam");
+    await user.clear(screen.getByLabelText("What would you like to call me?"));
+    await user.type(screen.getByLabelText("What would you like to call me?"), "Echo");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByLabelText("What should I call you?")).toHaveValue("Sam");
+    expect(screen.getByLabelText("What would you like to call me?")).toHaveValue("Echo");
+  });
+
+  it("preloads current settings when Welcome is rerun", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "observatory",
+          selectedModel: "llama3.2:latest",
+          userDisplayName: "Jordan",
+          assistantDisplayName: "Sol",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: false
+        });
+      }
+      if (command === "list_models") return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      if (command === "model_selection_state") return Promise.resolve(readyModelSelectionState);
+      if (command === "run_system_check") return Promise.resolve(fullSystemCheckResult);
+      if (command === "check_ollama_status") return Promise.resolve(readyOllamaStatus);
+      if (command === "save_settings" || command === "save_conversation") return Promise.resolve(args);
+      if (command === "load_conversation" || command === "load_active_conversation") return Promise.resolve(null);
+      if (command === "list_conversations" || command === "search_conversations") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Run Welcome Again..." }));
+    await openPersonalizationStep(user);
+
+    expect(await screen.findByLabelText("What should I call you?")).toHaveValue("Jordan");
+    expect(screen.getByLabelText("What would you like to call me?")).toHaveValue("Sol");
+    expect(screen.getByRole("button", { name: "Observatory" })).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("shows settings failure and retries without losing values", async () => {
+    const user = userEvent.setup();
+    let saveAttempts = 0;
+    mockFirstRunWithOllama();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "save_settings") {
+        saveAttempts += 1;
+        return saveAttempts === 1 ? Promise.reject("settings write failed") : Promise.resolve(args);
+      }
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: true,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      if (command === "model_selection_state") return Promise.resolve(readyModelSelectionState);
+      if (command === "run_system_check") return Promise.resolve(fullSystemCheckResult);
+      if (command === "check_ollama_status") return Promise.resolve(readyOllamaStatus);
+      if (command === "load_conversation" || command === "load_active_conversation") return Promise.resolve(null);
+      if (command === "list_conversations" || command === "search_conversations") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    await openPersonalizationStep(user);
+    await user.type(screen.getByLabelText("What should I call you?"), "Riley");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("I could not save those choices yet.");
+    expect(screen.getByText("settings write failed")).toBeInTheDocument();
+    expect(screen.getByLabelText("What should I call you?")).toHaveValue("Riley");
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(saveAttempts).toBe(2));
+  });
+
+  it("supports keyboard focus on theme choices", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openPersonalizationStep(user);
+    screen.getByRole("button", { name: "Crimson" }).focus();
+    await user.keyboard("{Tab}");
+
+    expect(screen.getByRole("button", { name: "Obsidian" })).toHaveFocus();
+  });
+
   it("bypasses onboarding for existing settings without a first-run flag", async () => {
     await renderApp();
 
-    expect(await screen.findByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Hello." })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Hello, I'm Nova." })).not.toBeInTheDocument();
   });
 
@@ -1613,7 +1811,7 @@ describe("App shell", () => {
     await renderApp();
 
     expect(screen.getAllByText("Nova")).toHaveLength(2);
-    expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hello." })).toBeInTheDocument();
     expect(screen.getByText("What's on the agenda today?")).toBeInTheDocument();
   });
 
@@ -1892,6 +2090,6 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "Clear conversation" }));
 
     expect(screen.queryByText("Ready to clear.")).not.toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Hello." })).toBeInTheDocument();
   });
 });

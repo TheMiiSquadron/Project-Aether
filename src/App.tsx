@@ -59,6 +59,7 @@ const supportedAttachmentExtensions = new Set([
 ]);
 
 const maxAttachmentBytes = 1024 * 1024;
+const maxDisplayNameLength = 48;
 
 type AppearancePreset = (typeof appearancePresets)[number]["id"];
 type ComposerStyle = (typeof composerStyles)[number]["id"];
@@ -66,6 +67,8 @@ type ComposerStyle = (typeof composerStyles)[number]["id"];
 type AppSettings = {
   theme: AppearancePreset;
   selectedModel: string;
+  userDisplayName: string;
+  assistantDisplayName: string;
   fontSize: number;
   composerStyle: ComposerStyle;
   showContextCounter: boolean;
@@ -222,6 +225,8 @@ type ConversationStreamPayload = {
 const defaultSettings: AppSettings = {
   theme: "crimson",
   selectedModel: defaultModel.name,
+  userDisplayName: "",
+  assistantDisplayName: "Nova",
   fontSize: 16,
   composerStyle: "subtle",
   showContextCounter: false,
@@ -268,9 +273,9 @@ const onboardingSteps = [
   {
     id: "personalization",
     eyebrow: "Personalization",
-    title: "A few preferences will go here.",
-    body: "Future options can tune the first-run experience. I'll keep them simple and explain what each one changes.",
-    status: "Placeholder"
+    title: "Let's make Aether feel like yours.",
+    body: "Choose how I address you, what you would like to call me, and the theme Aether should use. You can change these later in Settings.",
+    status: "Personal setup"
   },
   {
     id: "features",
@@ -319,22 +324,61 @@ function ComposerActionButton({
 type OnboardingFlowProps = {
   onFinish: () => void;
   developerMode: boolean;
+  settings: AppSettings;
+  onSettingsPreview: (settings: AppSettings) => void;
+  onSettingsCommit: (settings: AppSettings) => Promise<void>;
   selectedModel: string;
   onModelSelected: (model: string) => void;
   onModelsChanged: () => void;
 };
 
-function OnboardingFlow({ onFinish, developerMode, selectedModel, onModelSelected, onModelsChanged }: OnboardingFlowProps) {
+function OnboardingFlow({
+  onFinish,
+  developerMode,
+  settings,
+  onSettingsPreview,
+  onSettingsCommit,
+  selectedModel,
+  onModelSelected,
+  onModelsChanged
+}: OnboardingFlowProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
   const [modelSelectionReady, setModelSelectionReady] = useState(false);
+  const [personalizationDraft, setPersonalizationDraft] = useState<AppSettings>(settings);
+  const [personalizationReady, setPersonalizationReady] = useState(true);
+  const [personalizationError, setPersonalizationError] = useState<string | null>(null);
+  const [personalizationSaving, setPersonalizationSaving] = useState(false);
   const step = onboardingSteps[stepIndex];
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === onboardingSteps.length - 1;
   const isOllamaStep = step.id === "ollama";
   const isModelSelectionStep = step.id === "model-selection";
+  const isPersonalizationStep = step.id === "personalization";
   const nextLabel = isLastStep ? "Finish" : isOllamaStep && !ollamaReachable ? "Set Up Later" : "Next";
-  const nextDisabled = isModelSelectionStep && !modelSelectionReady;
+  const nextDisabled =
+    (isModelSelectionStep && !modelSelectionReady) ||
+    (isPersonalizationStep && (!personalizationReady || personalizationSaving));
+
+  const moveNext = async () => {
+    if (isLastStep) {
+      onFinish();
+      return;
+    }
+    if (isPersonalizationStep) {
+      setPersonalizationSaving(true);
+      setPersonalizationError(null);
+      try {
+        await onSettingsCommit(personalizationDraft);
+      } catch (caughtError) {
+        setPersonalizationError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+        setPersonalizationSaving(false);
+        return;
+      }
+      setPersonalizationSaving(false);
+    }
+    setStepIndex((current) => Math.min(onboardingSteps.length - 1, current + 1));
+  };
 
   return (
     <section className="welcome-flow" aria-label="Aether welcome experience">
@@ -352,7 +396,10 @@ function OnboardingFlow({ onFinish, developerMode, selectedModel, onModelSelecte
 
         <div
           className={`welcome-card ${
-            step.id === "system-check" || step.id === "ollama" || step.id === "model-selection"
+            step.id === "system-check" ||
+            step.id === "ollama" ||
+            step.id === "model-selection" ||
+            step.id === "personalization"
               ? "welcome-card--interactive"
               : ""
           }`}
@@ -371,10 +418,24 @@ function OnboardingFlow({ onFinish, developerMode, selectedModel, onModelSelecte
               selectedModel={selectedModel}
               onModelReady={(model) => {
                 onModelSelected(model);
+                setPersonalizationDraft((current) => ({ ...current, selectedModel: model }));
                 setModelSelectionReady(true);
               }}
               onModelPending={() => setModelSelectionReady(false)}
               onModelsChanged={onModelsChanged}
+            />
+          ) : null}
+          {step.id === "personalization" ? (
+            <PersonalizationPanel
+              developerMode={developerMode}
+              draft={personalizationDraft}
+              error={personalizationError}
+              saving={personalizationSaving}
+              onDraftChange={(nextDraft) => {
+                setPersonalizationDraft(nextDraft);
+                onSettingsPreview(nextDraft);
+              }}
+              onValidityChange={setPersonalizationReady}
             />
           ) : null}
           <span className="welcome-card__status">{step.status}</span>
@@ -399,20 +460,115 @@ function OnboardingFlow({ onFinish, developerMode, selectedModel, onModelSelecte
             className="welcome-nav-button welcome-nav-button--primary"
             type="button"
             disabled={nextDisabled}
-            onClick={() => {
-              if (isLastStep) {
-                onFinish();
-                return;
-              }
-              setStepIndex((current) => Math.min(onboardingSteps.length - 1, current + 1));
-            }}
+            onClick={() => void moveNext()}
           >
-            <span>{nextLabel}</span>
+            <span>{personalizationSaving ? "Saving..." : nextLabel}</span>
             {isLastStep ? null : <ArrowRight size={16} aria-hidden="true" />}
           </button>
         </div>
       </div>
     </section>
+  );
+}
+
+type PersonalizationPanelProps = {
+  developerMode: boolean;
+  draft: AppSettings;
+  error: string | null;
+  saving: boolean;
+  onDraftChange: (settings: AppSettings) => void;
+  onValidityChange: (isValid: boolean) => void;
+};
+
+function PersonalizationPanel({
+  developerMode,
+  draft,
+  error,
+  saving,
+  onDraftChange,
+  onValidityChange
+}: PersonalizationPanelProps) {
+  const assistantName = draft.assistantDisplayName;
+  const assistantNameTrimmed = assistantName.trim();
+  const assistantNameError = !assistantNameTrimmed ? "Please choose a name for the assistant." : null;
+
+  useEffect(() => {
+    onValidityChange(!assistantNameError);
+  }, [assistantNameError, onValidityChange]);
+
+  const updateDraft = (changes: Partial<AppSettings>) => {
+    onDraftChange({ ...draft, ...changes });
+  };
+
+  return (
+    <div className="personalization-panel" aria-live="polite">
+      <p>Aether is the application. {assistantNameTrimmed || "Nova"} is the assistant inside it.</p>
+
+      <div className="personalization-fields">
+        <label>
+          <span>What should I call you?</span>
+          <input
+            type="text"
+            value={draft.userDisplayName}
+            maxLength={maxDisplayNameLength}
+            onChange={(event) => updateDraft({ userDisplayName: event.target.value })}
+            placeholder="Optional"
+            aria-label="What should I call you?"
+            aria-describedby="user-name-help"
+          />
+          <small id="user-name-help">A nickname is fine. You can leave this blank.</small>
+        </label>
+
+        <label>
+          <span>What would you like to call me?</span>
+          <input
+            type="text"
+            value={draft.assistantDisplayName}
+            maxLength={maxDisplayNameLength}
+            onChange={(event) => updateDraft({ assistantDisplayName: event.target.value })}
+            aria-label="What would you like to call me?"
+            aria-invalid={assistantNameError ? "true" : undefined}
+            aria-describedby="assistant-name-help assistant-name-error"
+          />
+          <small id="assistant-name-help">This renames the assistant, not the Aether app.</small>
+          {assistantNameError ? (
+            <small id="assistant-name-error" className="personalization-error">
+              {assistantNameError}
+            </small>
+          ) : null}
+        </label>
+      </div>
+
+      <fieldset className="theme-preview-group">
+        <legend>Choose a theme</legend>
+        <div className="theme-preview-grid">
+          {appearancePresets.map((preset) => (
+            <button
+              key={preset.id}
+              className="theme-preview-button"
+              type="button"
+              aria-pressed={draft.theme === preset.id}
+              onClick={() => updateDraft({ theme: preset.id })}
+              data-preview-theme={preset.id}
+            >
+              <span className="theme-preview-swatch" aria-hidden="true">
+                <span />
+              </span>
+              <span>{preset.label}</span>
+            </button>
+          ))}
+        </div>
+      </fieldset>
+
+      {error ? (
+        <div className="personalization-save-error" role="alert">
+          <p>I could not save those choices yet. Please try again before continuing.</p>
+          {developerMode ? <code>{error}</code> : null}
+        </div>
+      ) : null}
+
+      {saving ? <p className="personalization-note">Saving your choices...</p> : null}
+    </div>
   );
 }
 
@@ -1068,9 +1224,12 @@ export function App() {
     if (!settingsLoadedRef.current) {
       return;
     }
+    if (settings.firstRun) {
+      return;
+    }
 
     const saveHandle = window.setTimeout(() => {
-      void invoke("save_settings", { settings });
+      void invoke("save_settings", { settings: sanitizePersonalizationSettings(settings) });
     }, 250);
 
     return () => window.clearTimeout(saveHandle);
@@ -1095,6 +1254,10 @@ export function App() {
   }, []);
 
   const selectedModel = settings.selectedModel || availableModels[0]?.name || defaultModel.name;
+  const assistantDisplayName = settings.assistantDisplayName.trim() || "Nova";
+  const userGreeting = settings.userDisplayName.trim()
+    ? `Hello, ${settings.userDisplayName.trim()}.`
+    : "Hello.";
   const selectedModelMissing =
     availableModels.length > 0 && !availableModels.some((model) => model.name === selectedModel);
   const contextCount = estimateContextCount(message, attachment);
@@ -1620,7 +1783,11 @@ export function App() {
   }
 
   function runWelcomeAgain() {
-    setSettings((current) => ({ ...current, firstRun: true }));
+    setSettings((current) => {
+      const nextSettings = { ...current, firstRun: true };
+      void invoke("save_settings", { settings: nextSettings });
+      return nextSettings;
+    });
     setSettingsOpen(false);
   }
 
@@ -1634,12 +1801,21 @@ export function App() {
     >
       {!settingsReady ? (
         <section className="boot-screen" aria-label="Loading Aether">
-          <span>Nova</span>
+          <span>{assistantDisplayName}</span>
         </section>
       ) : settings.firstRun ? (
         <OnboardingFlow
           onFinish={completeWelcomeFlow}
           developerMode={settings.developerMode}
+          settings={settings}
+          onSettingsPreview={setSettings}
+          onSettingsCommit={async (nextSettings) => {
+            const sanitizedSettings = sanitizePersonalizationSettings(nextSettings);
+            const savedSettings = await invoke<AppSettings | { settings: AppSettings }>("save_settings", {
+              settings: sanitizedSettings
+            });
+            setSettings(normalizeSettings("settings" in savedSettings ? savedSettings.settings : savedSettings));
+          }}
           selectedModel={settings.selectedModel}
           onModelSelected={(model) => setSettings((current) => ({ ...current, selectedModel: model }))}
           onModelsChanged={() => void refreshModels()}
@@ -1754,7 +1930,7 @@ export function App() {
       <div className="chat-shell">
       <header className="app-header">
         <div className="identity" aria-label="Application identity">
-          <span className="assistant-name">Nova</span>
+          <span className="assistant-name">{assistantDisplayName}</span>
         </div>
 
         <div className="header-actions" aria-label="Application controls">
@@ -1871,8 +2047,8 @@ export function App() {
       >
         {conversation.length === 0 ? (
           <div className="empty-state">
-            <p className="nova-label">Nova</p>
-            <h1>Hello, Alex.</h1>
+            <p className="nova-label">{assistantDisplayName}</p>
+            <h1>{userGreeting}</h1>
             <p className="agenda">What's on the agenda today?</p>
           </div>
         ) : (
@@ -1883,7 +2059,7 @@ export function App() {
                 key={conversationMessage.id}
               >
                 <div className="message-author">
-                  {conversationMessage.role === "user" ? "You" : "Nova"}
+                  {conversationMessage.role === "user" ? "You" : assistantDisplayName}
                 </div>
                 <div className={`message-card message-card--${conversationMessage.status ?? "complete"}`}>
                   {conversationMessage.attachmentName ? (
@@ -1895,7 +2071,7 @@ export function App() {
                   {conversationMessage.content ? (
                     <MarkdownMessage content={conversationMessage.content} />
                   ) : conversationMessage.status === "generating" ? (
-                    <span className="thinking-text">Nova is thinking...</span>
+                    <span className="thinking-text">{assistantDisplayName} is thinking...</span>
                   ) : null}
                   {conversationMessage.role === "assistant" &&
                   conversationMessage.status === "complete" &&
@@ -1967,8 +2143,8 @@ export function App() {
               }
             }}
             rows={1}
-            placeholder="Message Nova..."
-            aria-label="Message Nova"
+            placeholder={`Message ${assistantDisplayName}...`}
+            aria-label={`Message ${assistantDisplayName}`}
             disabled={isGenerating}
             autoFocus
           />
@@ -2019,6 +2195,34 @@ export function App() {
                   </option>
                 ))}
               </select>
+            </label>
+
+            <label>
+              <span>User display name</span>
+              <input
+                type="text"
+                maxLength={maxDisplayNameLength}
+                value={settings.userDisplayName}
+                onChange={(event) =>
+                  setSettings((current) => ({ ...current, userDisplayName: event.target.value }))
+                }
+                placeholder="Optional"
+              />
+            </label>
+
+            <label>
+              <span>Assistant display name</span>
+              <input
+                type="text"
+                maxLength={maxDisplayNameLength}
+                value={settings.assistantDisplayName}
+                onChange={(event) =>
+                  setSettings((current) => ({
+                    ...current,
+                    assistantDisplayName: event.target.value.trim() ? event.target.value : current.assistantDisplayName
+                  }))
+                }
+              />
             </label>
 
             <label>
@@ -2370,14 +2574,33 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     ? (settings.composerStyle as ComposerStyle)
     : defaultSettings.composerStyle;
 
+  const userDisplayName = limitDisplayName(settings.userDisplayName ?? defaultSettings.userDisplayName);
+  const assistantDisplayName =
+    limitDisplayName(settings.assistantDisplayName ?? defaultSettings.assistantDisplayName).trim() ||
+    defaultSettings.assistantDisplayName;
+
   return {
     ...defaultSettings,
     ...settings,
     theme,
     composerStyle,
+    userDisplayName,
+    assistantDisplayName,
     firstRun: settings.firstRun ?? false,
     fontSize: Math.min(Math.max(settings.fontSize ?? defaultSettings.fontSize, 14), 20)
   };
+}
+
+function sanitizePersonalizationSettings(settings: AppSettings): AppSettings {
+  return {
+    ...settings,
+    userDisplayName: limitDisplayName(settings.userDisplayName).trim(),
+    assistantDisplayName: limitDisplayName(settings.assistantDisplayName).trim() || defaultSettings.assistantDisplayName
+  };
+}
+
+function limitDisplayName(value: string) {
+  return Array.from(value).slice(0, maxDisplayNameLength).join("");
 }
 
 function statusLabel(status: "ready" | "connecting" | "offline") {

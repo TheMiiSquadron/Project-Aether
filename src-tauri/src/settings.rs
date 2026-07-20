@@ -10,6 +10,10 @@ const SETTINGS_FILE_NAME: &str = "settings.json";
 pub struct AppSettings {
     pub theme: String,
     pub selected_model: String,
+    #[serde(default)]
+    pub user_display_name: String,
+    #[serde(default = "default_assistant_display_name")]
+    pub assistant_display_name: String,
     pub font_size: u8,
     pub composer_style: String,
     pub show_context_counter: bool,
@@ -23,6 +27,8 @@ impl Default for AppSettings {
         Self {
             theme: "crimson".to_string(),
             selected_model: crate::shell::DEFAULT_MODEL_NAME.to_string(),
+            user_display_name: String::new(),
+            assistant_display_name: default_assistant_display_name(),
             font_size: 16,
             composer_style: "subtle".to_string(),
             show_context_counter: false,
@@ -30,6 +36,10 @@ impl Default for AppSettings {
             first_run: true,
         }
     }
+}
+
+fn default_assistant_display_name() -> String {
+    "Nova".to_string()
 }
 
 fn settings_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -79,6 +89,8 @@ mod tests {
 
         assert_eq!(settings.theme, "crimson");
         assert_eq!(settings.selected_model, crate::shell::DEFAULT_MODEL_NAME);
+        assert_eq!(settings.user_display_name, "");
+        assert_eq!(settings.assistant_display_name, "Nova");
         assert_eq!(settings.font_size, 16);
         assert_eq!(settings.composer_style, "subtle");
         assert!(!settings.show_context_counter);
@@ -101,5 +113,43 @@ mod tests {
         .expect("settings parse");
 
         assert!(!settings.first_run);
+        assert_eq!(settings.user_display_name, "");
+        assert_eq!(settings.assistant_display_name, "Nova");
+    }
+
+    #[test]
+    fn serializes_personalization_fields() {
+        let settings = AppSettings {
+            user_display_name: "Alex".to_string(),
+            assistant_display_name: "Nova Prime".to_string(),
+            ..AppSettings::default()
+        };
+
+        let serialized = serde_json::to_string(&settings).expect("settings serialize");
+
+        assert!(serialized.contains("\"userDisplayName\":\"Alex\""));
+        assert!(serialized.contains("\"assistantDisplayName\":\"Nova Prime\""));
+    }
+
+    #[test]
+    fn parses_personalization_fields() {
+        let settings = serde_json::from_str::<AppSettings>(
+            r#"{
+                "theme": "observatory",
+                "selectedModel": "qwen3:8b",
+                "userDisplayName": "Mira",
+                "assistantDisplayName": "Sol",
+                "fontSize": 17,
+                "composerStyle": "subtle",
+                "showContextCounter": true,
+                "developerMode": false,
+                "firstRun": false
+            }"#,
+        )
+        .expect("settings parse");
+
+        assert_eq!(settings.user_display_name, "Mira");
+        assert_eq!(settings.assistant_display_name, "Sol");
+        assert_eq!(settings.theme, "observatory");
     }
 }

@@ -482,6 +482,160 @@ input {
   overflow-wrap: anywhere;
 }
 
+.personalization-panel {
+  display: grid;
+  gap: 0.82rem;
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.9rem;
+  border: 1px solid var(--control-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--control-background) 82%, transparent);
+}
+
+.personalization-panel p {
+  margin: 0;
+  color: var(--secondary-text);
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.personalization-panel code {
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0.68rem 0.72rem;
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  background: var(--code-background);
+  color: var(--secondary-text);
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+.personalization-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.72rem;
+  min-width: 0;
+}
+
+.personalization-fields label {
+  display: grid;
+  gap: 0.36rem;
+  min-width: 0;
+}
+
+.personalization-fields span,
+.theme-preview-group legend {
+  color: var(--muted-text);
+  font-size: 0.74rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.personalization-fields input {
+  min-width: 0;
+  width: 100%;
+  padding: 0.62rem 0.68rem;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  color: var(--primary-text);
+  background: color-mix(in srgb, var(--shell-background) 34%, transparent);
+}
+
+.personalization-fields input:focus-visible,
+.theme-preview-button:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.personalization-fields small,
+.personalization-note {
+  color: var(--muted-text);
+  font-size: 0.78rem;
+  line-height: 1.35;
+}
+
+.personalization-error {
+  color: #ffb8c2;
+}
+
+.theme-preview-group {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.theme-preview-group legend {
+  margin-bottom: 0.48rem;
+}
+
+.theme-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.theme-preview-button {
+  display: grid;
+  gap: 0.44rem;
+  min-width: 0;
+  padding: 0.58rem;
+  border: 1px solid var(--control-border);
+  border-radius: 10px;
+  color: var(--shell-text);
+  background: color-mix(in srgb, var(--shell-background) 34%, transparent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.theme-preview-button[aria-pressed="true"] {
+  border-color: var(--accent-border-hover);
+  background: color-mix(in srgb, var(--accent-background) 12%, var(--control-background));
+}
+
+.theme-preview-button > span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-weight: 760;
+}
+
+.theme-preview-swatch {
+  display: block;
+  height: 2.2rem;
+  overflow: hidden;
+  border: 1px solid var(--control-border);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #2d0710, #18070a 58%, #e8c2bb);
+}
+
+.theme-preview-swatch span {
+  display: block;
+  width: 42%;
+  height: 100%;
+  background: rgba(255, 245, 246, 0.16);
+}
+
+.theme-preview-button[data-preview-theme="obsidian"] .theme-preview-swatch {
+  background: linear-gradient(135deg, #171310, #100e0c 58%, #ead4b4);
+}
+
+.theme-preview-button[data-preview-theme="observatory"] .theme-preview-swatch {
+  background: linear-gradient(135deg, #121925, #0a0e14 58%, #c9d8e8);
+}
+
+.personalization-save-error {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  padding: 0.72rem;
+  border: 1px solid var(--warning-border);
+  border-radius: 10px;
+  background: var(--warning-background);
+}
+
 .welcome-action-row {
   display: flex;
   flex-wrap: wrap;
@@ -1895,6 +2049,11 @@ textarea:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .personalization-fields,
+  .theme-preview-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .welcome-step-count {
     grid-column: 1 / -1;
     grid-row: 1;
@@ -1951,9 +2110,18 @@ textarea:focus-visible {
 
   .system-check-panel,
   .ollama-panel,
-  .model-selection-panel {
+  .model-selection-panel,
+  .personalization-panel {
     gap: 0.58rem;
     padding: 0.68rem;
+  }
+
+  .personalization-fields {
+    gap: 0.5rem;
+  }
+
+  .theme-preview-swatch {
+    height: 1.7rem;
   }
 
   .system-check-item {
