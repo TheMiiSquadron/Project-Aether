@@ -50,6 +50,17 @@ const fullSystemCheckResult = {
   unavailableFields: []
 };
 
+const readyOllamaStatus = {
+  installationDetected: true,
+  serviceReachable: true,
+  version: "0.5.7",
+  modelsInstalled: true,
+  modelCount: 2,
+  modelNames: ["llama3.2:latest", "qwen3:8b"],
+  canStart: true,
+  unavailableFields: []
+};
+
 function emitStream(payload: ConversationStreamPayload) {
   act(() => {
     streamListener?.({ payload });
@@ -82,6 +93,55 @@ async function renderApp() {
   return result;
 }
 
+function mockFirstRunWithOllama(
+  ollamaStatus: unknown = readyOllamaStatus,
+  options: { developerMode?: boolean; rejectStatus?: unknown; rejectStart?: unknown } = {}
+) {
+  invokeMock.mockImplementation((command, args) => {
+    if (command === "load_settings") {
+      return Promise.resolve({
+        theme: "crimson",
+        selectedModel: "llama3.2:latest",
+        fontSize: 16,
+        composerStyle: "subtle",
+        showContextCounter: false,
+        developerMode: options.developerMode ?? false,
+        firstRun: true
+      });
+    }
+    if (command === "list_models") {
+      return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+    }
+    if (command === "run_system_check") {
+      return Promise.resolve(fullSystemCheckResult);
+    }
+    if (command === "check_ollama_status") {
+      return options.rejectStatus ? Promise.reject(options.rejectStatus) : Promise.resolve(ollamaStatus);
+    }
+    if (command === "start_ollama") {
+      return options.rejectStart ? Promise.reject(options.rejectStart) : Promise.resolve(undefined);
+    }
+    if (command === "list_conversations" || command === "search_conversations") {
+      return Promise.resolve([]);
+    }
+    if (command === "load_conversation") {
+      return Promise.resolve(null);
+    }
+    if (command === "save_settings" || command === "save_conversation") {
+      return Promise.resolve(args);
+    }
+    return Promise.resolve({});
+  });
+}
+
+async function openOllamaStep(user: ReturnType<typeof userEvent.setup>) {
+  await renderApp();
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  expect(await screen.findByRole("heading", { name: "I'll check for Ollama." })).toBeInTheDocument();
+}
+
 describe("App shell", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
@@ -111,6 +171,14 @@ describe("App shell", () => {
 
       if (command === "run_system_check") {
         return Promise.resolve(fullSystemCheckResult);
+      }
+
+      if (command === "check_ollama_status") {
+        return Promise.resolve(readyOllamaStatus);
+      }
+
+      if (command === "start_ollama") {
+        return Promise.resolve(undefined);
       }
 
       if (command === "load_active_conversation") {
@@ -265,6 +333,9 @@ describe("App shell", () => {
       }
       if (command === "run_system_check") {
         return Promise.resolve(fullSystemCheckResult);
+      }
+      if (command === "check_ollama_status") {
+        return Promise.resolve(readyOllamaStatus);
       }
       if (command === "list_conversations" || command === "search_conversations") {
         return Promise.resolve([]);
@@ -487,6 +558,198 @@ describe("App shell", () => {
 
     expect(await screen.findByText(longCpu)).toBeInTheDocument();
     expect(screen.getByText(longGpu)).toBeInTheDocument();
+  });
+
+  it("shows the Ollama checking state during welcome", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "check_ollama_status") {
+        return new Promise(() => undefined);
+      }
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "run_system_check") {
+        return Promise.resolve(fullSystemCheckResult);
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await openOllamaStep(user);
+
+    expect(screen.getByText("I'm checking for Ollama on this device.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Set Up Later" })).toBeInTheDocument();
+  });
+
+  it("shows the Ollama ready state with version and models", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openOllamaStep(user);
+
+    expect(await screen.findByText("Aether can connect to Ollama locally.")).toBeInTheDocument();
+    expect(screen.getByText("0.5.7")).toBeInTheDocument();
+    expect(screen.getByText("2 models")).toBeInTheDocument();
+    expect(screen.getAllByText("llama3.2:latest").length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("shows the Ollama no-model state", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama({
+      ...readyOllamaStatus,
+      modelsInstalled: false,
+      modelCount: 0,
+      modelNames: []
+    });
+
+    await openOllamaStep(user);
+
+    expect(await screen.findByText("Aether can reach Ollama locally. No local models are installed yet.")).toBeInTheDocument();
+    expect(screen.getByText("0 models")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("shows the installed-but-stopped Ollama state and can start safely", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama({
+      installationDetected: true,
+      serviceReachable: false,
+      version: null,
+      modelsInstalled: false,
+      modelCount: 0,
+      modelNames: [],
+      canStart: true,
+      unavailableFields: ["version", "models"]
+    });
+
+    await openOllamaStep(user);
+
+    expect(
+      await screen.findByText("Ollama appears to be installed, but Aether cannot reach the local service right now.")
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Start Ollama" }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("start_ollama"));
+    expect(screen.getByRole("button", { name: "Set Up Later" })).toBeInTheDocument();
+  });
+
+  it("shows the not-installed Ollama state and opens the download page", async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    mockFirstRunWithOllama({
+      installationDetected: false,
+      serviceReachable: false,
+      version: null,
+      modelsInstalled: false,
+      modelCount: 0,
+      modelNames: [],
+      canStart: false,
+      unavailableFields: ["installation", "version", "models"]
+    });
+
+    await openOllamaStep(user);
+
+    expect(await screen.findByText("Ollama lets Aether talk to local models on this device. I do not see it installed yet.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open Ollama Download Page" }));
+    expect(openSpy).toHaveBeenCalledWith("https://ollama.com/download", "_blank", "noopener,noreferrer");
+  });
+
+  it("shows the Ollama partial state when version details are unavailable", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama({
+      ...readyOllamaStatus,
+      version: null,
+      unavailableFields: ["version"]
+    });
+
+    await openOllamaStep(user);
+
+    expect(await screen.findByText("Aether can reach Ollama locally, though one detail was unavailable.")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable details: version.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeInTheDocument();
+  });
+
+  it("refreshes the Ollama status on request", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openOllamaStep(user);
+    await screen.findByText("Aether can connect to Ollama locally.");
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+
+    await waitFor(() => {
+      expect(invokeMock.mock.calls.filter(([command]) => command === "check_ollama_status")).toHaveLength(2);
+    });
+  });
+
+  it("continues from the Ollama page through Set Up Later", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama({
+      installationDetected: false,
+      serviceReachable: false,
+      version: null,
+      modelsInstalled: false,
+      modelCount: 0,
+      modelNames: [],
+      canStart: false,
+      unavailableFields: ["installation", "version", "models"]
+    });
+
+    await openOllamaStep(user);
+    await user.click(await screen.findByRole("button", { name: "Set Up Later" }));
+
+    expect(await screen.findByRole("heading", { name: "We'll choose a model here later." })).toBeInTheDocument();
+  });
+
+  it("shows Ollama raw failure details only in Developer Mode", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama(readyOllamaStatus, {
+      developerMode: true,
+      rejectStatus: "raw local ollama failure"
+    });
+
+    await openOllamaStep(user);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("I could not complete the Ollama check.");
+    expect(screen.getByText("raw local ollama failure")).toBeInTheDocument();
+  });
+
+  it("renders long Ollama model names and version strings", async () => {
+    const user = userEvent.setup();
+    const longVersion = "0.5.7-local-build-with-a-very-long-version-string-that-should-wrap-inside-the-card";
+    const longModel =
+      "aether-local-model-with-an-extraordinarily-long-name-and-tag-that-should-stay-inside-the-window:latest";
+    mockFirstRunWithOllama({
+      ...readyOllamaStatus,
+      version: longVersion,
+      modelCount: 1,
+      modelNames: [longModel]
+    });
+
+    await openOllamaStep(user);
+
+    expect(await screen.findByText(longVersion)).toBeInTheDocument();
+    expect(screen.getByText(longModel)).toBeInTheDocument();
   });
 
   it("bypasses onboarding for existing settings without a first-run flag", async () => {

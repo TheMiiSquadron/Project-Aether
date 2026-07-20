@@ -7,11 +7,13 @@ import {
   ChevronDown,
   Clipboard,
   Download,
+  ExternalLink,
   FileText,
   MessageSquare,
   MoreHorizontal,
   Paperclip,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
   Search,
@@ -153,6 +155,19 @@ type SystemCheckResult = {
   unavailableFields: SystemCheckField[];
 };
 
+type OllamaStatusField = "installation" | "version" | "models";
+
+type OllamaStatus = {
+  installationDetected: boolean;
+  serviceReachable: boolean;
+  version?: string | null;
+  modelsInstalled: boolean;
+  modelCount: number;
+  modelNames: string[];
+  canStart: boolean;
+  unavailableFields: OllamaStatusField[];
+};
+
 type ConversationStreamEvent =
   | { type: "started"; model: string }
   | { type: "chunk"; content: string }
@@ -193,16 +208,16 @@ const onboardingSteps = [
   {
     id: "system-check",
     eyebrow: "System Check",
-    title: "I'll check the basics here soon.",
-    body: "For now, this step is only a placeholder. A later pass will verify local readiness without leaving Aether.",
-    status: "Placeholder"
+    title: "I'll check the basics.",
+    body: "I can take a local look at this device so setup has useful context without sending anything away.",
+    status: "Local check"
   },
   {
     id: "ollama",
     eyebrow: "Ollama",
-    title: "I'll help with Ollama here later.",
-    body: "This phase does not install, download, or change anything. It simply reserves the place where local model setup guidance will live.",
-    status: "Placeholder"
+    title: "I'll check for Ollama.",
+    body: "Aether uses Ollama to connect with local models. I'll only check what is available here, and you can set it up later.",
+    status: "Local runtime"
   },
   {
     id: "model-selection",
@@ -269,9 +284,12 @@ type OnboardingFlowProps = {
 
 function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
   const [stepIndex, setStepIndex] = useState(0);
+  const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
   const step = onboardingSteps[stepIndex];
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === onboardingSteps.length - 1;
+  const isOllamaStep = step.id === "ollama";
+  const nextLabel = isLastStep ? "Finish" : isOllamaStep && !ollamaReachable ? "Set Up Later" : "Next";
 
   return (
     <section className="welcome-flow" aria-label="Aether welcome experience">
@@ -287,11 +305,17 @@ function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
           ))}
         </div>
 
-        <div className="welcome-card" key={step.id}>
+        <div
+          className={`welcome-card ${step.id === "system-check" || step.id === "ollama" ? "welcome-card--interactive" : ""}`}
+          key={step.id}
+        >
           <p className="welcome-card__eyebrow">{step.eyebrow}</p>
           <h1>{step.title}</h1>
           <p>{step.body}</p>
           {step.id === "system-check" ? <SystemCheckPanel developerMode={developerMode} /> : null}
+          {step.id === "ollama" ? (
+            <OllamaSetupPanel developerMode={developerMode} onReachableChange={setOllamaReachable} />
+          ) : null}
           <span className="welcome-card__status">{step.status}</span>
         </div>
 
@@ -321,12 +345,182 @@ function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
               setStepIndex((current) => Math.min(onboardingSteps.length - 1, current + 1));
             }}
           >
-            <span>{isLastStep ? "Finish" : "Next"}</span>
+            <span>{nextLabel}</span>
             {isLastStep ? null : <ArrowRight size={16} aria-hidden="true" />}
           </button>
         </div>
       </div>
     </section>
+  );
+}
+
+type OllamaSetupPanelProps = {
+  developerMode: boolean;
+  onReachableChange: (reachable: boolean | null) => void;
+};
+
+function OllamaSetupPanel({ developerMode, onReachableChange }: OllamaSetupPanelProps) {
+  const [state, setState] = useState<
+    "checking" | "ready" | "noModels" | "installedStopped" | "notInstalled" | "partial" | "failed"
+  >("checking");
+  const [status, setStatus] = useState<OllamaStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const [starting, setStarting] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("checking");
+    setError(null);
+    setNotice(null);
+    onReachableChange(null);
+
+    invoke<OllamaStatus>("check_ollama_status")
+      .then((ollamaStatus) => {
+        if (cancelled) {
+          return;
+        }
+        setStatus(ollamaStatus);
+        onReachableChange(ollamaStatus.serviceReachable);
+        setState(getOllamaPanelState(ollamaStatus));
+      })
+      .catch((caughtError) => {
+        if (cancelled) {
+          return;
+        }
+        setStatus(null);
+        onReachableChange(false);
+        setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+        setState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt, onReachableChange]);
+
+  const refresh = () => setAttempt((current) => current + 1);
+
+  const startOllama = () => {
+    setStarting(true);
+    setNotice(null);
+    invoke("start_ollama")
+      .then(() => {
+        setNotice("I asked Ollama to start. I'll check the connection again now.");
+        window.setTimeout(refresh, 700);
+      })
+      .catch((caughtError) => {
+        setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+        setNotice("I could not start Ollama safely from here. Please start it normally, then try Refresh.");
+      })
+      .finally(() => setStarting(false));
+  };
+
+  if (state === "checking") {
+    return (
+      <div className="ollama-panel" aria-live="polite">
+        <div className="system-check-loading" aria-hidden="true" />
+        <p>I'm checking for Ollama on this device.</p>
+      </div>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <div className="ollama-panel" role="alert">
+        <p>I could not complete the Ollama check. You can try again, or set it up later and keep going.</p>
+        {developerMode && error ? <code>{error}</code> : null}
+        <div className="welcome-action-row">
+          <button className="welcome-inline-button" type="button" onClick={refresh}>
+            <RefreshCw size={15} aria-hidden="true" />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (!status) {
+    return null;
+  }
+
+  if (state === "notInstalled") {
+    return (
+      <div className="ollama-panel" aria-live="polite">
+        <p>Ollama lets Aether talk to local models on this device. I do not see it installed yet.</p>
+        <div className="welcome-action-row">
+          <button className="welcome-inline-button" type="button" onClick={openOllamaDownloadPage}>
+            <ExternalLink size={15} aria-hidden="true" />
+            <span>Open Ollama Download Page</span>
+          </button>
+          <button className="welcome-inline-button" type="button" onClick={refresh}>
+            <RefreshCw size={15} aria-hidden="true" />
+            <span>Retry</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state === "installedStopped") {
+    return (
+      <div className="ollama-panel" aria-live="polite">
+        <p>Ollama appears to be installed, but Aether cannot reach the local service right now.</p>
+        {notice ? <p className="ollama-panel__note">{notice}</p> : null}
+        {developerMode && error ? <code>{error}</code> : null}
+        <div className="welcome-action-row">
+          {status.canStart ? (
+            <button className="welcome-inline-button" type="button" onClick={startOllama} disabled={starting}>
+              <Play size={15} aria-hidden="true" />
+              <span>{starting ? "Starting..." : "Start Ollama"}</span>
+            </button>
+          ) : null}
+          <button className="welcome-inline-button" type="button" onClick={refresh}>
+            <RefreshCw size={15} aria-hidden="true" />
+            <span>Refresh</span>
+          </button>
+        </div>
+        {!status.canStart ? (
+          <p className="ollama-panel__note">Start Ollama from your normal app launcher, then refresh this check.</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  const isPartial = state === "partial";
+  const isNoModels = state === "noModels";
+
+  return (
+    <div className="ollama-panel" aria-live="polite">
+      <p>
+        {isPartial
+          ? "Aether can reach Ollama locally, though one detail was unavailable."
+          : isNoModels
+            ? "Aether can reach Ollama locally. No local models are installed yet."
+            : "Aether can connect to Ollama locally."}
+      </p>
+      <dl className="system-check-grid">
+        <SystemCheckItem label="Version" value={status.version} />
+        <SystemCheckItem label="Installed models" value={formatModelCount(status.modelCount)} />
+      </dl>
+      {status.modelNames.length ? (
+        <div className="ollama-model-list" aria-label="Installed Ollama models">
+          {status.modelNames.map((modelName) => (
+            <span key={modelName}>{modelName}</span>
+          ))}
+        </div>
+      ) : null}
+      {isPartial ? (
+        <p className="ollama-panel__note">Unavailable details: {formatOllamaUnavailableFields(status.unavailableFields)}.</p>
+      ) : null}
+      <div className="welcome-action-row">
+        <button className="welcome-inline-button" type="button" onClick={refresh}>
+          <RefreshCw size={15} aria-hidden="true" />
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1576,6 +1770,42 @@ function formatUnavailableFields(fields: SystemCheckField[]) {
   };
 
   return fields.map((field) => labels[field]).join(", ");
+}
+
+function getOllamaPanelState(
+  status: OllamaStatus
+): "ready" | "noModels" | "installedStopped" | "notInstalled" | "partial" {
+  if (!status.serviceReachable) {
+    return status.installationDetected ? "installedStopped" : "notInstalled";
+  }
+  if (status.unavailableFields.length) {
+    return "partial";
+  }
+  if (!status.modelsInstalled) {
+    return "noModels";
+  }
+  return "ready";
+}
+
+function formatModelCount(count: number) {
+  if (!Number.isFinite(count) || count <= 0) {
+    return "0 models";
+  }
+  return count === 1 ? "1 model" : `${count.toLocaleString()} models`;
+}
+
+function formatOllamaUnavailableFields(fields: OllamaStatusField[]) {
+  const labels: Record<OllamaStatusField, string> = {
+    installation: "installation detection",
+    version: "version",
+    models: "model details"
+  };
+
+  return fields.map((field) => labels[field]).join(", ");
+}
+
+function openOllamaDownloadPage() {
+  window.open("https://ollama.com/download", "_blank", "noopener,noreferrer");
 }
 
 function mapStoredMessageToConversationMessage(message: StoredMessage): ConversationMessage {

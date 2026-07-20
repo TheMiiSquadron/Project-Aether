@@ -11,6 +11,7 @@ use conversation::{
     SubmitMessageRequest, SubmitMessageResponse,
 };
 use model_provider::{AvailableModel, ProviderErrorPayload};
+use ollama::OllamaStatus;
 use settings::AppSettings;
 pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PROMPT};
 use std::fs;
@@ -76,6 +77,16 @@ fn run_system_check(app: AppHandle) -> Result<SystemCheckResult, String> {
         .map_err(|error| format!("Could not prepare Aether data storage: {error}"))?;
 
     system_check::collect_system_check(&data_dir)
+}
+
+#[tauri::command]
+async fn check_ollama_status() -> OllamaStatus {
+    ollama::check_local_ollama_status().await
+}
+
+#[tauri::command]
+fn start_ollama() -> Result<(), String> {
+    ollama::start_local_ollama()
 }
 
 #[tauri::command]
@@ -206,6 +217,8 @@ pub fn run() {
             load_settings,
             save_settings,
             run_system_check,
+            check_ollama_status,
+            start_ollama,
             load_active_conversation,
             list_conversations,
             search_conversations,
