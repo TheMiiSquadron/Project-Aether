@@ -131,6 +131,28 @@ type ProviderErrorPayload = {
   diagnostics?: string | null;
 };
 
+type SystemCheckField =
+  | "operatingSystem"
+  | "operatingSystemVersion"
+  | "cpuName"
+  | "totalMemory"
+  | "availableMemory"
+  | "gpuInformation"
+  | "dataDiskAvailable";
+
+type SystemCheckResult = {
+  operatingSystem?: string | null;
+  operatingSystemVersion?: string | null;
+  architecture: string;
+  cpuName?: string | null;
+  logicalCpuCount: number;
+  totalMemoryBytes?: number | null;
+  availableMemoryBytes?: number | null;
+  gpuNames: string[];
+  dataDiskAvailableBytes?: number | null;
+  unavailableFields: SystemCheckField[];
+};
+
 type ConversationStreamEvent =
   | { type: "started"; model: string }
   | { type: "chunk"; content: string }
@@ -242,9 +264,10 @@ function ComposerActionButton({
 
 type OnboardingFlowProps = {
   onFinish: () => void;
+  developerMode: boolean;
 };
 
-function OnboardingFlow({ onFinish }: OnboardingFlowProps) {
+function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const step = onboardingSteps[stepIndex];
   const isFirstStep = stepIndex === 0;
@@ -268,6 +291,7 @@ function OnboardingFlow({ onFinish }: OnboardingFlowProps) {
           <p className="welcome-card__eyebrow">{step.eyebrow}</p>
           <h1>{step.title}</h1>
           <p>{step.body}</p>
+          {step.id === "system-check" ? <SystemCheckPanel developerMode={developerMode} /> : null}
           <span className="welcome-card__status">{step.status}</span>
         </div>
 
@@ -303,6 +327,108 @@ function OnboardingFlow({ onFinish }: OnboardingFlowProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+type SystemCheckPanelProps = {
+  developerMode: boolean;
+};
+
+function SystemCheckPanel({ developerMode }: SystemCheckPanelProps) {
+  const [state, setState] = useState<"checking" | "complete" | "partial" | "failed">("checking");
+  const [result, setResult] = useState<SystemCheckResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    setState("checking");
+    setError(null);
+
+    invoke<SystemCheckResult>("run_system_check")
+      .then((systemCheck) => {
+        if (cancelled) {
+          return;
+        }
+        setResult(systemCheck);
+        setState(systemCheck.unavailableFields.length ? "partial" : "complete");
+      })
+      .catch((caughtError) => {
+        if (cancelled) {
+          return;
+        }
+        setResult(null);
+        setError(caughtError instanceof Error ? caughtError.message : String(caughtError));
+        setState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [attempt]);
+
+  if (state === "checking") {
+    return (
+      <div className="system-check-panel" aria-live="polite">
+        <div className="system-check-loading" aria-hidden="true" />
+        <p>I'm taking a quick look at this device.</p>
+      </div>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <div className="system-check-panel" role="alert">
+        <p>I could not complete the system check. You can try again, and we can keep setup moving if it still fails.</p>
+        {developerMode && error ? <code>{error}</code> : null}
+        <button className="welcome-inline-button" type="button" onClick={() => setAttempt((current) => current + 1)}>
+          Retry
+        </button>
+      </div>
+    );
+  }
+
+  if (!result) {
+    return null;
+  }
+
+  const isPartial = state === "partial";
+
+  return (
+    <div className="system-check-panel" aria-live="polite">
+      <p>
+        {isPartial
+          ? "I found the essentials, but one or more details could not be detected."
+          : "Everything I found stays on this device."}
+      </p>
+      <dl className="system-check-grid">
+        <SystemCheckItem
+          label="Operating system"
+          value={joinSystemValue(result.operatingSystem, result.operatingSystemVersion)}
+        />
+        <SystemCheckItem label="Architecture" value={result.architecture} />
+        <SystemCheckItem label="CPU" value={result.cpuName} />
+        <SystemCheckItem label="Threads" value={formatCount(result.logicalCpuCount)} />
+        <SystemCheckItem label="Memory" value={formatMemoryPair(result.availableMemoryBytes, result.totalMemoryBytes)} />
+        <SystemCheckItem label="GPU" value={result.gpuNames.length ? result.gpuNames.join(", ") : null} />
+        <SystemCheckItem label="Aether data space" value={formatBytes(result.dataDiskAvailableBytes)} />
+      </dl>
+      {isPartial ? (
+        <p className="system-check-note">Unavailable details: {formatUnavailableFields(result.unavailableFields)}.</p>
+      ) : null}
+      <button className="welcome-inline-button" type="button" onClick={() => setAttempt((current) => current + 1)}>
+        Retry
+      </button>
+    </div>
+  );
+}
+
+function SystemCheckItem({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="system-check-item">
+      <dt>{label}</dt>
+      <dd>{value || "Not detected"}</dd>
+    </div>
   );
 }
 
@@ -946,7 +1072,7 @@ export function App() {
           <span>Nova</span>
         </section>
       ) : settings.firstRun ? (
-        <OnboardingFlow onFinish={completeWelcomeFlow} />
+        <OnboardingFlow onFinish={completeWelcomeFlow} developerMode={settings.developerMode} />
       ) : (
       <>
       <aside className="history-sidebar" aria-label="Conversation history">
@@ -1404,6 +1530,52 @@ function normalizeStorageError(error: unknown): ProviderErrorPayload {
     action: "You can keep chatting, but this conversation may not be saved until the problem is fixed.",
     diagnostics: error instanceof Error ? error.message : String(error)
   };
+}
+
+function joinSystemValue(primary?: string | null, secondary?: string | null) {
+  return [primary, secondary].filter(Boolean).join(" ") || null;
+}
+
+function formatCount(value: number) {
+  return Number.isFinite(value) && value > 0 ? value.toLocaleString() : null;
+}
+
+function formatMemoryPair(available?: number | null, total?: number | null) {
+  if (available && total) {
+    return `${formatBytes(available)} available of ${formatBytes(total)}`;
+  }
+  return formatBytes(total ?? available);
+}
+
+function formatBytes(value?: number | null) {
+  if (!value || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+
+  const units = ["B", "KB", "MB", "GB", "TB"];
+  let size = value;
+  let unitIndex = 0;
+  while (size >= 1024 && unitIndex < units.length - 1) {
+    size /= 1024;
+    unitIndex += 1;
+  }
+
+  const precision = unitIndex <= 1 || size >= 10 ? 0 : 1;
+  return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatUnavailableFields(fields: SystemCheckField[]) {
+  const labels: Record<SystemCheckField, string> = {
+    operatingSystem: "operating system",
+    operatingSystemVersion: "operating system version",
+    cpuName: "CPU name",
+    totalMemory: "total memory",
+    availableMemory: "available memory",
+    gpuInformation: "GPU information",
+    dataDiskAvailable: "Aether data disk space"
+  };
+
+  return fields.map((field) => labels[field]).join(", ");
 }
 
 function mapStoredMessageToConversationMessage(message: StoredMessage): ConversationMessage {

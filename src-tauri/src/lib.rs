@@ -4,6 +4,7 @@ mod ollama;
 mod settings;
 mod shell;
 pub mod storage;
+mod system_check;
 
 use conversation::{
     ActiveStreams, CancelStreamRequest, CancelStreamResponse, StartStreamResponse,
@@ -15,6 +16,7 @@ pub use shell::{ShellMetadata, DEFAULT_GREETING, DEFAULT_MODEL_NAME, DEFAULT_PRO
 use std::fs;
 use std::path::PathBuf;
 use storage::{ConversationSummary, StoredConversation};
+use system_check::SystemCheckResult;
 use tauri::{AppHandle, Manager, State};
 
 const ACTIVE_CONVERSATION_ID: &str = "active-conversation";
@@ -61,6 +63,19 @@ fn load_settings(app: AppHandle) -> Result<AppSettings, String> {
 #[tauri::command]
 fn save_settings(app: AppHandle, settings: AppSettings) -> Result<AppSettings, String> {
     settings::save_settings(app, settings)
+}
+
+#[tauri::command]
+fn run_system_check(app: AppHandle) -> Result<SystemCheckResult, String> {
+    let data_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|error| format!("Could not locate Aether data storage: {error}"))?;
+
+    fs::create_dir_all(&data_dir)
+        .map_err(|error| format!("Could not prepare Aether data storage: {error}"))?;
+
+    system_check::collect_system_check(&data_dir)
 }
 
 #[tauri::command]
@@ -190,6 +205,7 @@ pub fn run() {
             list_models,
             load_settings,
             save_settings,
+            run_system_check,
             load_active_conversation,
             list_conversations,
             search_conversations,

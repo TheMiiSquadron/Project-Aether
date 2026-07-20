@@ -37,6 +37,19 @@ type ConversationStreamPayload = {
 
 let streamListener: ((event: { payload: ConversationStreamPayload }) => void) | undefined;
 
+const fullSystemCheckResult = {
+  operatingSystem: "Windows",
+  operatingSystemVersion: "11",
+  architecture: "x86_64",
+  cpuName: "AMD Ryzen Local Test CPU",
+  logicalCpuCount: 16,
+  totalMemoryBytes: 34359738368,
+  availableMemoryBytes: 17179869184,
+  gpuNames: ["NVIDIA Local Test GPU"],
+  dataDiskAvailableBytes: 536870912000,
+  unavailableFields: []
+};
+
 function emitStream(payload: ConversationStreamPayload) {
   act(() => {
     streamListener?.({ payload });
@@ -94,6 +107,10 @@ describe("App shell", () => {
           { name: "llama3.2:latest", provider: "Ollama" },
           { name: "qwen3:8b", provider: "Ollama" }
         ]);
+      }
+
+      if (command === "run_system_check") {
+        return Promise.resolve(fullSystemCheckResult);
       }
 
       if (command === "load_active_conversation") {
@@ -246,6 +263,9 @@ describe("App shell", () => {
       if (command === "list_models") {
         return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
       }
+      if (command === "run_system_check") {
+        return Promise.resolve(fullSystemCheckResult);
+      }
       if (command === "list_conversations" || command === "search_conversations") {
         return Promise.resolve([]);
       }
@@ -283,6 +303,190 @@ describe("App shell", () => {
         settings: expect.objectContaining({ firstRun: false })
       });
     });
+  });
+
+  it("renders a complete system check result during welcome", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "run_system_check") {
+        return Promise.resolve(fullSystemCheckResult);
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Everything I found stays on this device.")).toBeInTheDocument();
+    expect(screen.getByText("AMD Ryzen Local Test CPU")).toBeInTheDocument();
+    expect(screen.getByText("NVIDIA Local Test GPU")).toBeInTheDocument();
+    expect(screen.getByText("16 GB available of 32 GB")).toBeInTheDocument();
+  });
+
+  it("renders a partial system check when GPU information is unavailable", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "run_system_check") {
+        return Promise.resolve({
+          ...fullSystemCheckResult,
+          gpuNames: [],
+          unavailableFields: ["gpuInformation"]
+        });
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(
+      await screen.findByText("I found the essentials, but one or more details could not be detected.")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Not detected")).toBeInTheDocument();
+    expect(screen.getByText("Unavailable details: GPU information.")).toBeInTheDocument();
+  });
+
+  it("shows a system check failure with retry", async () => {
+    const user = userEvent.setup();
+    let attempts = 0;
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "run_system_check") {
+        attempts += 1;
+        return attempts === 1 ? Promise.reject("local check failed") : Promise.resolve(fullSystemCheckResult);
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("I could not complete the system check.");
+    expect(screen.queryByText("local check failed")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+
+    expect(await screen.findByText("Everything I found stays on this device.")).toBeInTheDocument();
+    expect(attempts).toBe(2);
+  });
+
+  it("renders long CPU and GPU names without losing the result", async () => {
+    const user = userEvent.setup();
+    const longCpu =
+      "Extremely Long Local CPU Name With Many Marketing Words And Thread Details That Should Wrap Gracefully";
+    const longGpu =
+      "Extremely Long Local GPU Name With Many Renderer Details That Should Stay Inside The Welcome Card";
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "run_system_check") {
+        return Promise.resolve({
+          ...fullSystemCheckResult,
+          cpuName: longCpu,
+          gpuNames: [longGpu]
+        });
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText(longCpu)).toBeInTheDocument();
+    expect(screen.getByText(longGpu)).toBeInTheDocument();
   });
 
   it("bypasses onboarding for existing settings without a first-run flag", async () => {
