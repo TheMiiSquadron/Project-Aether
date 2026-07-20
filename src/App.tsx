@@ -2,6 +2,8 @@ import { CSSProperties, ChangeEvent, FormEvent, useEffect, useRef, useState } fr
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import {
+  ArrowLeft,
+  ArrowRight,
   ChevronDown,
   Clipboard,
   Download,
@@ -65,6 +67,7 @@ type AppSettings = {
   composerStyle: ComposerStyle;
   showContextCounter: boolean;
   developerMode: boolean;
+  firstRun: boolean;
 };
 
 type AvailableModel = {
@@ -146,8 +149,68 @@ const defaultSettings: AppSettings = {
   fontSize: 16,
   composerStyle: "subtle",
   showContextCounter: false,
-  developerMode: false
+  developerMode: false,
+  firstRun: true
 };
+
+const onboardingSteps = [
+  {
+    id: "splash",
+    eyebrow: "Project Aether",
+    title: "Nova is almost ready.",
+    body: "A short guided setup will prepare the local conversation space before you begin.",
+    status: "Welcome experience"
+  },
+  {
+    id: "welcome",
+    eyebrow: "Welcome",
+    title: "A calm place to work with Nova.",
+    body: "Aether keeps the conversation first: local, focused, and built to grow carefully over time.",
+    status: "Orientation"
+  },
+  {
+    id: "system-check",
+    eyebrow: "System Check",
+    title: "System readiness will appear here.",
+    body: "This placeholder will later confirm local runtime readiness without leaving the main Aether window.",
+    status: "Placeholder"
+  },
+  {
+    id: "ollama",
+    eyebrow: "Ollama",
+    title: "Ollama setup will appear here.",
+    body: "Future work will guide model-provider setup. This phase does not install or download anything.",
+    status: "Placeholder"
+  },
+  {
+    id: "model-selection",
+    eyebrow: "Model Selection",
+    title: "Model choice will appear here.",
+    body: "A later pass will help choose an installed local model. For now, your existing model setting stays untouched.",
+    status: "Placeholder"
+  },
+  {
+    id: "personalization",
+    eyebrow: "Personalization",
+    title: "Personal touches will appear here.",
+    body: "Future options can tune the first-run experience while preserving Aether's quiet visual style.",
+    status: "Placeholder"
+  },
+  {
+    id: "features",
+    eyebrow: "Features",
+    title: "Aether's feature tour will appear here.",
+    body: "This step will later introduce conversation history, Markdown, export, and search at the right pace.",
+    status: "Placeholder"
+  },
+  {
+    id: "finish",
+    eyebrow: "Finish",
+    title: "You are ready to open Aether.",
+    body: "Finish the welcome flow to enter the normal Nova conversation experience.",
+    status: "Complete"
+  }
+] as const;
 
 type ComposerActionButtonProps = {
   isGenerating?: boolean;
@@ -177,6 +240,72 @@ function ComposerActionButton({
   );
 }
 
+type OnboardingFlowProps = {
+  onFinish: () => void;
+};
+
+function OnboardingFlow({ onFinish }: OnboardingFlowProps) {
+  const [stepIndex, setStepIndex] = useState(0);
+  const step = onboardingSteps[stepIndex];
+  const isFirstStep = stepIndex === 0;
+  const isLastStep = stepIndex === onboardingSteps.length - 1;
+
+  return (
+    <section className="welcome-flow" aria-label="Aether welcome experience">
+      <div className="welcome-shell">
+        <div className="welcome-progress" aria-label="Welcome progress">
+          {onboardingSteps.map((progressStep, index) => (
+            <span
+              key={progressStep.id}
+              className="welcome-progress__dot"
+              aria-current={index === stepIndex ? "step" : undefined}
+              data-complete={index < stepIndex ? "true" : undefined}
+            />
+          ))}
+        </div>
+
+        <div className="welcome-card" key={step.id}>
+          <p className="welcome-card__eyebrow">{step.eyebrow}</p>
+          <h1>{step.title}</h1>
+          <p>{step.body}</p>
+          <span className="welcome-card__status">{step.status}</span>
+        </div>
+
+        <div className="welcome-footer">
+          <button
+            className="welcome-nav-button"
+            type="button"
+            onClick={() => setStepIndex((current) => Math.max(0, current - 1))}
+            disabled={isFirstStep}
+          >
+            <ArrowLeft size={16} aria-hidden="true" />
+            <span>Back</span>
+          </button>
+
+          <span className="welcome-step-count">
+            Step {stepIndex + 1} of {onboardingSteps.length}
+          </span>
+
+          <button
+            className="welcome-nav-button welcome-nav-button--primary"
+            type="button"
+            onClick={() => {
+              if (isLastStep) {
+                onFinish();
+                return;
+              }
+              setStepIndex((current) => Math.min(onboardingSteps.length - 1, current + 1));
+            }}
+          >
+            <span>{isLastStep ? "Finish" : "Next"}</span>
+            {isLastStep ? null : <ArrowRight size={16} aria-hidden="true" />}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function App() {
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -197,6 +326,7 @@ export function App() {
   const skipNextConversationSaveRef = useRef(false);
   const [message, setMessage] = useState("");
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
+  const [settingsReady, setSettingsReady] = useState(false);
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([]);
   const [providerStatus, setProviderStatus] = useState<"ready" | "connecting" | "offline">("connecting");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
@@ -216,8 +346,10 @@ export function App() {
   const [error, setError] = useState<ProviderErrorPayload | null>(null);
 
   useEffect(() => {
-    composerRef.current?.focus();
-  }, []);
+    if (settingsReady && !settings.firstRun) {
+      window.requestAnimationFrame(() => composerRef.current?.focus());
+    }
+  }, [settingsReady, settings.firstRun]);
 
   useEffect(() => {
     invoke<AppSettings>("load_settings")
@@ -229,6 +361,7 @@ export function App() {
       })
       .finally(() => {
         settingsLoadedRef.current = true;
+        setSettingsReady(true);
       });
 
     void refreshModels();
@@ -786,14 +919,32 @@ export function App() {
     await navigator.clipboard.writeText(content);
   };
 
+  function completeWelcomeFlow() {
+    setSettings((current) => ({ ...current, firstRun: false }));
+    window.requestAnimationFrame(() => composerRef.current?.focus());
+  }
+
+  function runWelcomeAgain() {
+    setSettings((current) => ({ ...current, firstRun: true }));
+    setSettingsOpen(false);
+  }
+
   return (
     <main
-      className="aether-shell"
+      className={`aether-shell${settings.firstRun ? " aether-shell--onboarding" : ""}`}
       data-theme={settings.theme}
       data-composer-style={settings.composerStyle}
       aria-label="Aether"
       style={{ "--message-font-size": `${settings.fontSize}px` } as CSSProperties}
     >
+      {!settingsReady ? (
+        <section className="boot-screen" aria-label="Loading Aether">
+          <span>Nova</span>
+        </section>
+      ) : settings.firstRun ? (
+        <OnboardingFlow onFinish={completeWelcomeFlow} />
+      ) : (
+      <>
       <aside className="history-sidebar" aria-label="Conversation history">
         <div className="history-sidebar__header">
           <div>
@@ -1118,6 +1269,7 @@ export function App() {
             placeholder="Message Nova..."
             aria-label="Message Nova"
             disabled={isGenerating}
+            autoFocus
           />
           {settings.showContextCounter ? (
             <div className="context-counter" aria-label="Approximate context count">
@@ -1222,6 +1374,10 @@ export function App() {
               <span>Show developer diagnostics in errors</span>
             </label>
 
+            <button className="settings-secondary-action" type="button" onClick={runWelcomeAgain}>
+              Run Welcome Again...
+            </button>
+
             {selectedModelMissing ? (
               <p className="settings-warning">
                 The saved model is not currently installed. Choose an available Ollama model from the header.
@@ -1231,6 +1387,8 @@ export function App() {
         </div>
       ) : null}
       </div>
+      </>
+      )}
     </main>
   );
 }
@@ -1401,6 +1559,7 @@ function normalizeSettings(settings: Partial<AppSettings>): AppSettings {
     ...settings,
     theme,
     composerStyle,
+    firstRun: settings.firstRun ?? false,
     fontSize: Math.min(Math.max(settings.fontSize ?? defaultSettings.fontSize, 14), 20)
   };
 }

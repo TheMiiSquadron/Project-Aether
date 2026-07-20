@@ -229,6 +229,84 @@ describe("App shell", () => {
     expect(screen.queryByRole("heading", { name: "Hello, Alex." })).not.toBeInTheDocument();
   });
 
+  it("shows the welcome flow on first launch and opens chat after finishing", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([{ name: "llama3.2:latest", provider: "Ollama" }]);
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "load_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      return Promise.resolve({});
+    });
+
+    await renderApp();
+
+    expect(await screen.findByRole("heading", { name: "Nova is almost ready." })).toBeInTheDocument();
+    expect(screen.getByText("Step 1 of 8")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("heading", { name: "A calm place to work with Nova." })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(await screen.findByRole("heading", { name: "Nova is almost ready." })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("heading", { name: "A calm place to work with Nova." })).toBeInTheDocument();
+
+    for (let step = 0; step < 6; step += 1) {
+      await user.click(screen.getByRole("button", { name: "Next" }));
+    }
+
+    expect(await screen.findByRole("heading", { name: "You are ready to open Aether." })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Finish" }));
+
+    expect(await screen.findByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({ firstRun: false })
+      });
+    });
+  });
+
+  it("bypasses onboarding for existing settings without a first-run flag", async () => {
+    await renderApp();
+
+    expect(await screen.findByRole("heading", { name: "Hello, Alex." })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Nova is almost ready." })).not.toBeInTheDocument();
+  });
+
+  it("runs the welcome flow again from settings", async () => {
+    const user = userEvent.setup();
+    await renderApp();
+
+    await user.click(screen.getByRole("button", { name: "Settings" }));
+    await user.click(screen.getByRole("button", { name: "Run Welcome Again..." }));
+
+    expect(await screen.findByRole("heading", { name: "Nova is almost ready." })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({ firstRun: true })
+      });
+    });
+  });
+
   it("lists saved conversations and switches between them", async () => {
     const user = userEvent.setup();
     invokeMock.mockImplementation((command, args) => {

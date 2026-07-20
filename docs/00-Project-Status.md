@@ -1,11 +1,11 @@
 # Project Status
 
 **Status:** Living Document
-**Current Phase:** v0.2 Released
-**Current Status:** v0.2.0 released after Windows/Envy validation
-**Current Target:** v0.2.1 planning
+**Current Phase:** v0.2.1 Implementation
+**Current Status:** v0.2.1-0 in active development after the v0.2.0 release
+**Current Target:** v0.2.1
 **Last Completed Milestone:** v0.2.0 conversation history release
-**Next Milestone:** v0.2.1 planning
+**Next Milestone:** Welcome Experience framework validation
 
 Project Aether is being developed design-first. The v0.1 experience, architecture, responsibilities, data model, event model, settings, and UI direction were validated before code was scaffolded.
 
@@ -23,11 +23,13 @@ Nova's initial identity layer lives in `prompts/nova-system-prompt.md`. The Conv
 
 Aether now discovers installed Ollama models, allows selecting the active model, renders Markdown and code blocks, supports one user-selected UTF-8 text/code attachment up to 1 MB, persists implemented v0.1 settings, shows friendly provider errors, and keeps diagnostics limited to Developer Mode.
 
-Memory, tools, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.2. Conversation history and persistence shipped in v0.2.0.
+Memory, tools, Portal integration, agents, automation, and other future roadmap features remain intentionally deferred beyond v0.2.1. The active v0.2.1 implementation focus is a first-launch Welcome Experience framework.
 
 Release notes are prepared in [Release Notes v0.1.0](Release-Notes-v0.1.0.md) and [Release Notes v0.2.0](Release-Notes-v0.2.0.md). The v0.2.0 release checklist is complete after Windows/Envy validation and final release tagging.
 
 Since v0.1.0, Aether has shipped the v0.2 implementation pieces: a SQLite-backed conversation storage layer, schema versioning, structured saved conversation/message types, active conversation load/save commands, automatic active conversation persistence in the UI, a conversation sidebar, new chat, conversation switching, rename/delete flows, upgraded GFM rendering, current conversation Markdown export, and basic local conversation search.
+
+For v0.2.1, Aether is adding a UI-only first-launch Welcome Experience. Phase 1 persists a `firstRun` flag, shows a guided in-window onboarding flow for new users, lets existing users bypass onboarding, and adds a Settings action to run the welcome flow again for testing.
 
 NOVA remains the intended high-performance runtime for larger-model, GPU, and long-session validation after the v0.1 release. It is not required to validate the v0.1 Windows app build.
 

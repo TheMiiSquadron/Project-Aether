@@ -71,3 +71,4 @@ Represents application configuration, not conversation history or long-term memo
 * font_size
 * behavior_options
 * developer_mode
+* first_run

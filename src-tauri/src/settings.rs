@@ -14,6 +14,8 @@ pub struct AppSettings {
     pub composer_style: String,
     pub show_context_counter: bool,
     pub developer_mode: bool,
+    #[serde(default)]
+    pub first_run: bool,
 }
 
 impl Default for AppSettings {
@@ -25,6 +27,7 @@ impl Default for AppSettings {
             composer_style: "subtle".to_string(),
             show_context_counter: false,
             developer_mode: false,
+            first_run: true,
         }
     }
 }
@@ -80,5 +83,23 @@ mod tests {
         assert_eq!(settings.composer_style, "subtle");
         assert!(!settings.show_context_counter);
         assert!(!settings.developer_mode);
+        assert!(settings.first_run);
+    }
+
+    #[test]
+    fn older_settings_without_first_run_bypass_onboarding() {
+        let settings = serde_json::from_str::<AppSettings>(
+            r#"{
+                "theme": "crimson",
+                "selectedModel": "llama3.2:latest",
+                "fontSize": 16,
+                "composerStyle": "subtle",
+                "showContextCounter": false,
+                "developerMode": false
+            }"#,
+        )
+        .expect("settings parse");
+
+        assert!(!settings.first_run);
     }
 }
