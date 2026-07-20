@@ -1081,7 +1081,7 @@ export function App() {
             <header>
               <div>
                 <h2>Settings</h2>
-                <p>v0.1 preferences only.</p>
+                <p>General preferences.</p>
               </div>
               <button type="button" className="icon-button" aria-label="Close settings" onClick={() => setSettingsOpen(false)}>
                 <X size={18} aria-hidden="true" />
@@ -1336,11 +1336,11 @@ function validateAttachment(file: File) {
   const extension = file.name.slice(file.name.lastIndexOf(".")).toLowerCase();
 
   if (!supportedAttachmentExtensions.has(extension)) {
-    return "Aether v0.1 only accepts UTF-8 text and code files.";
+    return "Aether accepts one UTF-8 text or code file.";
   }
 
   if (file.size > maxAttachmentBytes) {
-    return "Aether v0.1 accepts one text/code file up to 1 MB.";
+    return "Aether accepts one text/code file up to 1 MB.";
   }
 
   return null;

@@ -4,7 +4,7 @@ Project Aether is a local-first, extensible AI platform designed to power Nova a
 
 Nova is the AI personality users interact with. Aether is the platform underneath: the conversation engine, model providers, memory, tools, plugins, settings, and storage that make Nova possible.
 
-Status: v0.1.0 validated on macOS/Orion and Windows/Envy.
+Status: v0.2.0-alpha.0 in active development after the v0.1.0 release validated on macOS/Orion and Windows/Envy.
 
 ## Development
 
@@ -36,7 +36,7 @@ cd src-tauri && cargo fmt --check
 npm run tauri -- build
 ```
 
-The current implementation uses the frozen v0.1 streaming request path:
+The current implementation uses the frozen v0.1 streaming request path plus the first v0.2 persistence foundation:
 
 ```text
 UI -> Conversation Engine -> Model Provider -> Ollama provider
@@ -49,6 +49,8 @@ Nova's initial identity is defined in [prompts/nova-system-prompt.md](prompts/no
 Streaming responses are delivered from Rust to the React UI as normalized conversation stream events: started, chunk, completed, cancelled, and failed. The UI updates the active assistant message incrementally and lets the Send button become Stop during generation.
 
 The v0.1 app includes Markdown rendering, code blocks with copy actions, user-initiated text/code attachments, persisted settings, friendly provider errors, and the frozen Nova conversation shell.
+
+The current v0.2 alpha work adds a SQLite-backed storage foundation and persists the active conversation locally. Multiple saved conversations, the conversation sidebar, search, rename/delete flows, and Markdown export remain in progress.
 
 ## Documentation
 
