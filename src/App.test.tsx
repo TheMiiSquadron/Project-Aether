@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { App, buildConversationExportMarkdown } from "./App";
 import { markdownShowcase } from "./MarkdownShowcase";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
@@ -49,6 +49,15 @@ function latestStreamId() {
   };
 
   return request.request.streamId;
+}
+
+function readBlobText(blob: Blob) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener("load", () => resolve(String(reader.result)));
+    reader.addEventListener("error", () => reject(reader.error));
+    reader.readAsText(blob);
+  });
 }
 
 async function renderApp() {
@@ -411,7 +420,72 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "Conversation actions" }));
 
     expect(screen.getByRole("menu", { name: "Conversation actions" })).toBeInTheDocument();
+    expect(screen.getByRole("menuitem", { name: "Export as Markdown" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Clear current conversation" })).toBeDisabled();
+  });
+
+  it("exports the current conversation as Markdown", async () => {
+    const user = userEvent.setup();
+    const createObjectUrl = vi.fn((_: Blob) => "blob:aether-export");
+    const revokeObjectUrl = vi.fn();
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    Object.defineProperty(URL, "createObjectURL", {
+      configurable: true,
+      value: createObjectUrl
+    });
+    Object.defineProperty(URL, "revokeObjectURL", {
+      configurable: true,
+      value: revokeObjectUrl
+    });
+
+    await renderApp();
+
+    await user.type(screen.getByLabelText("Message Nova"), "Export this{enter}");
+    const streamId = latestStreamId();
+    emitStream({ streamId, event: { type: "chunk", content: "Exported response." } });
+    emitStream({ streamId, event: { type: "completed", model: "llama3.2:latest" } });
+
+    await screen.findByText("Exported response.");
+    await user.click(screen.getByRole("button", { name: "Conversation actions" }));
+    await user.click(screen.getByRole("menuitem", { name: "Export as Markdown" }));
+
+    expect(createObjectUrl).toHaveBeenCalledTimes(1);
+    const blob = createObjectUrl.mock.calls[0][0];
+    const exportedText = await readBlobText(blob);
+    expect(exportedText).toContain("# Export this");
+    expect(exportedText).toContain("## You - ");
+    expect(exportedText).toContain("Exported response.");
+    expect(clickSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("builds a readable Markdown export document", () => {
+    const exported = buildConversationExportMarkdown(
+      [
+        {
+          id: "message-1",
+          role: "user",
+          content: "Please review this.",
+          status: "complete",
+          attachmentName: "notes.md",
+          createdAt: "2026-07-20T05:00:00.000Z"
+        },
+        {
+          id: "message-2",
+          role: "assistant",
+          content: "Reviewed.",
+          status: "cancelled",
+          createdAt: "2026-07-20T05:01:00.000Z"
+        }
+      ],
+      "Review notes",
+      "llama3.2:latest"
+    );
+
+    expect(exported).toContain("# Review notes");
+    expect(exported).toContain("Model: llama3.2:latest");
+    expect(exported).toContain("Attachment: notes.md");
+    expect(exported).toContain("Status: cancelled");
+    expect(exported).toContain("---");
   });
 
   it("renders Nova's empty state", async () => {

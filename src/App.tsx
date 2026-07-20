@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import {
   ChevronDown,
   Clipboard,
+  Download,
   FileText,
   MessageSquare,
   MoreHorizontal,
@@ -717,6 +718,26 @@ export function App() {
     window.requestAnimationFrame(() => composerRef.current?.focus());
   };
 
+  const handleExportConversation = () => {
+    if (!conversation.length) {
+      return;
+    }
+
+    const title = activeConversationTitleRef.current ?? buildConversationTitle(conversation);
+    const exportedMarkdown = buildConversationExportMarkdown(conversation, title, selectedModel);
+    const blob = new Blob([exportedMarkdown], { type: "text/markdown;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+
+    link.href = url;
+    link.download = `${slugifyFileName(title)}.md`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    setConversationMenuOpen(false);
+  };
+
   const handleAttachmentChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     event.target.value = "";
@@ -930,15 +951,27 @@ export function App() {
                     </div>
                   </div>
                 ) : (
-                  <button
-                    className="conversation-menu__item conversation-menu__item--danger"
-                    type="button"
-                    role="menuitem"
-                    disabled={!conversation.length || isGenerating}
-                    onClick={() => setClearConfirmationOpen(true)}
-                  >
-                    Clear current conversation
-                  </button>
+                  <>
+                    <button
+                      className="conversation-menu__item"
+                      type="button"
+                      role="menuitem"
+                      disabled={!conversation.length}
+                      onClick={handleExportConversation}
+                    >
+                      <Download size={15} aria-hidden="true" />
+                      <span>Export as Markdown</span>
+                    </button>
+                    <button
+                      className="conversation-menu__item conversation-menu__item--danger"
+                      type="button"
+                      role="menuitem"
+                      disabled={!conversation.length || isGenerating}
+                      onClick={() => setClearConfirmationOpen(true)}
+                    >
+                      Clear current conversation
+                    </button>
+                  </>
                 )}
               </div>
             ) : null}
@@ -1254,6 +1287,52 @@ function buildConversationTitle(conversation: ConversationMessage[]) {
   }
 
   return firstUserMessage.length > 64 ? `${firstUserMessage.slice(0, 61)}...` : firstUserMessage;
+}
+
+export function buildConversationExportMarkdown(
+  conversation: ConversationMessage[],
+  title: string,
+  selectedModel: string
+) {
+  const lines = [
+    `# ${title.trim() || "Aether conversation"}`,
+    "",
+    `Exported: ${new Date().toISOString()}`,
+    `Model: ${selectedModel}`,
+    ""
+  ];
+
+  conversation.forEach((message, index) => {
+    if (index > 0) {
+      lines.push("---", "");
+    }
+
+    const speaker = message.role === "user" ? "You" : "Nova";
+    lines.push(`## ${speaker} - ${message.createdAt}`);
+
+    if (message.status && message.status !== "complete") {
+      lines.push("", `Status: ${message.status}`);
+    }
+
+    if (message.attachmentName) {
+      lines.push("", `Attachment: ${message.attachmentName}`);
+    }
+
+    lines.push("", message.content.trimEnd(), "");
+  });
+
+  return `${lines.join("\n").trimEnd()}\n`;
+}
+
+function slugifyFileName(value: string) {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 72);
+
+  return slug || "aether-conversation";
 }
 
 function formatConversationSummary(summary: ConversationSummary) {

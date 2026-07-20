@@ -50,7 +50,7 @@ Streaming responses are delivered from Rust to the React UI as normalized conver
 
 The v0.1 app includes Markdown rendering, code blocks with copy actions, user-initiated text/code attachments, persisted settings, friendly provider errors, and the frozen Nova conversation shell.
 
-The current v0.2 alpha work adds a SQLite-backed storage foundation and persists the active conversation locally. Multiple saved conversations, the conversation sidebar, search, rename/delete flows, and Markdown export remain in progress.
+The current v0.2 alpha work adds SQLite-backed conversation storage, multiple saved conversations, a conversation sidebar, new chat, conversation switching, rename/delete flows, Markdown export, and upgraded GFM rendering. Basic local search remains in progress.
 
 ## Documentation
 
