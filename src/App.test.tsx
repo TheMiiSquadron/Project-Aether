@@ -36,6 +36,7 @@ type ConversationStreamPayload = {
 };
 
 let streamListener: ((event: { payload: ConversationStreamPayload }) => void) | undefined;
+let modelDownloadListener: ((event: { payload: unknown }) => void) | undefined;
 
 const fullSystemCheckResult = {
   operatingSystem: "Windows",
@@ -61,6 +62,35 @@ const readyOllamaStatus = {
   unavailableFields: []
 };
 
+const modelRecommendations = {
+  recommended: {
+    name: "qwen3:8b",
+    title: "Qwen3 8B",
+    description: "Balanced speed, quality, and hardware requirements.",
+    detail: "Suitable for most users."
+  },
+  alternatives: [
+    {
+      name: "llama3.2",
+      title: "Llama 3.2",
+      description: "A dependable general-purpose local model."
+    },
+    {
+      name: "gemma3",
+      title: "Gemma",
+      description: "A compact option for everyday local assistance."
+    }
+  ]
+};
+
+const readyModelSelectionState = {
+  recommendations: modelRecommendations,
+  installedModels: [{ name: "llama3.2:latest", provider: "Ollama" }],
+  selectedModel: "llama3.2:latest",
+  selectedModelInstalled: true,
+  fallbackModel: "llama3.2:latest"
+};
+
 function emitStream(payload: ConversationStreamPayload) {
   act(() => {
     streamListener?.({ payload });
@@ -73,6 +103,12 @@ function latestStreamId() {
   };
 
   return request.request.streamId;
+}
+
+function emitModelDownload(payload: unknown) {
+  act(() => {
+    modelDownloadListener?.({ payload });
+  });
 }
 
 function readBlobText(blob: Blob) {
@@ -121,6 +157,18 @@ function mockFirstRunWithOllama(
     if (command === "start_ollama") {
       return options.rejectStart ? Promise.reject(options.rejectStart) : Promise.resolve(undefined);
     }
+    if (command === "model_selection_state") {
+      return Promise.resolve(readyModelSelectionState);
+    }
+    if (command === "start_model_download") {
+      return Promise.resolve({ downloadId: "download-1" });
+    }
+    if (command === "cancel_model_download") {
+      return Promise.resolve({ downloadId: "download-1", cancelled: true });
+    }
+    if (command === "verify_model") {
+      return Promise.resolve(undefined);
+    }
     if (command === "list_conversations" || command === "search_conversations") {
       return Promise.resolve([]);
     }
@@ -140,6 +188,12 @@ async function openOllamaStep(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Next" }));
   await user.click(screen.getByRole("button", { name: "Next" }));
   expect(await screen.findByRole("heading", { name: "I'll check for Ollama." })).toBeInTheDocument();
+}
+
+async function openModelSelectionStep(user: ReturnType<typeof userEvent.setup>) {
+  await openOllamaStep(user);
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  expect(await screen.findByRole("heading", { name: "Let's choose your first model." })).toBeInTheDocument();
 }
 
 describe("App shell", () => {
@@ -178,6 +232,22 @@ describe("App shell", () => {
       }
 
       if (command === "start_ollama") {
+        return Promise.resolve(undefined);
+      }
+
+      if (command === "model_selection_state") {
+        return Promise.resolve(readyModelSelectionState);
+      }
+
+      if (command === "start_model_download") {
+        return Promise.resolve({ downloadId: "download-1" });
+      }
+
+      if (command === "cancel_model_download") {
+        return Promise.resolve({ downloadId: "download-1", cancelled: true });
+      }
+
+      if (command === "verify_model") {
         return Promise.resolve(undefined);
       }
 
@@ -230,9 +300,15 @@ describe("App shell", () => {
       return Promise.resolve({});
     });
     streamListener = undefined;
+    modelDownloadListener = undefined;
     listenMock.mockReset();
-    listenMock.mockImplementation((_eventName, handler) => {
-      streamListener = handler as (event: { payload: ConversationStreamPayload }) => void;
+    listenMock.mockImplementation((eventName, handler) => {
+      if (eventName === "conversation-stream") {
+        streamListener = handler as (event: { payload: ConversationStreamPayload }) => void;
+      }
+      if (eventName === "model-download-progress") {
+        modelDownloadListener = handler as (event: { payload: unknown }) => void;
+      }
       return Promise.resolve(() => undefined);
     });
     vi.spyOn(window, "confirm").mockReturnValue(true);
@@ -337,6 +413,9 @@ describe("App shell", () => {
       if (command === "check_ollama_status") {
         return Promise.resolve(readyOllamaStatus);
       }
+      if (command === "model_selection_state") {
+        return Promise.resolve(readyModelSelectionState);
+      }
       if (command === "list_conversations" || command === "search_conversations") {
         return Promise.resolve([]);
       }
@@ -361,9 +440,14 @@ describe("App shell", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
     expect(await screen.findByRole("heading", { name: "This is your local workspace." })).toBeInTheDocument();
 
-    for (let step = 0; step < 6; step += 1) {
-      await user.click(screen.getByRole("button", { name: "Next" }));
-    }
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("heading", { name: "Let's choose your first model." })).toBeInTheDocument();
+    expect(await screen.findByText("Model Ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(await screen.findByRole("heading", { name: "You're ready." })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Finish" }));
@@ -718,7 +802,7 @@ describe("App shell", () => {
     await openOllamaStep(user);
     await user.click(await screen.findByRole("button", { name: "Set Up Later" }));
 
-    expect(await screen.findByRole("heading", { name: "We'll choose a model here later." })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Let's choose your first model." })).toBeInTheDocument();
   });
 
   it("shows Ollama raw failure details only in Developer Mode", async () => {
@@ -750,6 +834,276 @@ describe("App shell", () => {
 
     expect(await screen.findByText(longVersion)).toBeInTheDocument();
     expect(screen.getByText(longModel)).toBeInTheDocument();
+  });
+
+  it("shows existing models and allows selecting one during welcome", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama();
+
+    await openModelSelectionStep(user);
+
+    expect(await screen.findByText("Model Ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "llama3.2:latest" }));
+    await waitFor(() => {
+      expect(invokeMock).toHaveBeenCalledWith("save_settings", {
+        settings: expect.objectContaining({ selectedModel: "llama3.2:latest" })
+      });
+    });
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  });
+
+  it("shows the configured recommendation when no models are installed", async () => {
+    const user = userEvent.setup();
+    mockFirstRunWithOllama({
+      ...readyOllamaStatus,
+      modelCount: 0,
+      modelNames: [],
+      modelsInstalled: false
+    });
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "model_selection_state") {
+        return Promise.resolve({
+          ...readyModelSelectionState,
+          installedModels: [],
+          selectedModelInstalled: false,
+          fallbackModel: null
+        });
+      }
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([]);
+      }
+      if (command === "run_system_check") {
+        return Promise.resolve(fullSystemCheckResult);
+      }
+      if (command === "check_ollama_status") {
+        return Promise.resolve({ ...readyOllamaStatus, modelCount: 0, modelNames: [], modelsInstalled: false });
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      if (command === "load_conversation" || command === "load_active_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      if (command === "start_model_download") {
+        return Promise.resolve({ downloadId: "download-1" });
+      }
+      if (command === "verify_model") {
+        return Promise.resolve(undefined);
+      }
+      return Promise.resolve({});
+    });
+
+    await openModelSelectionStep(user);
+
+    expect(await screen.findByText("★★★★★ Recommended")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Qwen3 8B" })).toBeInTheDocument();
+    expect(screen.getByText("Balanced speed, quality, and hardware requirements.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+  });
+
+  it("downloads a recommended model, shows progress, and verifies it", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") {
+        return Promise.resolve([]);
+      }
+      if (command === "run_system_check") {
+        return Promise.resolve(fullSystemCheckResult);
+      }
+      if (command === "check_ollama_status") {
+        return Promise.resolve({ ...readyOllamaStatus, modelCount: 0, modelNames: [], modelsInstalled: false });
+      }
+      if (command === "model_selection_state") {
+        return Promise.resolve({
+          ...readyModelSelectionState,
+          installedModels: [],
+          selectedModelInstalled: false,
+          fallbackModel: null
+        });
+      }
+      if (command === "start_model_download") {
+        return Promise.resolve({ downloadId: "download-1" });
+      }
+      if (command === "verify_model") {
+        return Promise.resolve(undefined);
+      }
+      if (command === "save_settings" || command === "save_conversation") {
+        return Promise.resolve(args);
+      }
+      if (command === "load_conversation" || command === "load_active_conversation") {
+        return Promise.resolve(null);
+      }
+      if (command === "list_conversations" || command === "search_conversations") {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve({});
+    });
+
+    await openModelSelectionStep(user);
+    await user.click(await screen.findByRole("button", { name: "Install" }));
+
+    expect(await screen.findByText("I'm downloading your first model. This may take a few minutes depending on your internet connection.")).toBeInTheDocument();
+    emitModelDownload({
+      type: "progress",
+      downloadId: "download-1",
+      model: "qwen3:8b",
+      progress: {
+        status: "downloading",
+        message: "downloading",
+        percentage: 50,
+        completedBytes: 50,
+        totalBytes: 100
+      }
+    });
+    expect(await screen.findByText("50%")).toBeInTheDocument();
+    emitModelDownload({ type: "completed", downloadId: "download-1", model: "qwen3:8b" });
+
+    expect(await screen.findByText("Model Ready")).toBeInTheDocument();
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledWith("verify_model", { request: { model: "qwen3:8b" } }));
+  });
+
+  it("cancels a model download and returns to selection", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") return Promise.resolve([]);
+      if (command === "run_system_check") return Promise.resolve(fullSystemCheckResult);
+      if (command === "check_ollama_status") return Promise.resolve({ ...readyOllamaStatus, modelCount: 0, modelNames: [], modelsInstalled: false });
+      if (command === "model_selection_state") {
+        return Promise.resolve({ ...readyModelSelectionState, installedModels: [], selectedModelInstalled: false, fallbackModel: null });
+      }
+      if (command === "start_model_download") return Promise.resolve({ downloadId: "download-1" });
+      if (command === "cancel_model_download") return Promise.resolve({ downloadId: "download-1", cancelled: true });
+      if (command === "save_settings" || command === "save_conversation") return Promise.resolve(args);
+      if (command === "load_conversation" || command === "load_active_conversation") return Promise.resolve(null);
+      if (command === "list_conversations" || command === "search_conversations") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    await openModelSelectionStep(user);
+    await user.click(await screen.findByRole("button", { name: "Install" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
+
+    expect(await screen.findByText("No models are installed yet. Let's download your first one.")).toBeInTheDocument();
+    expect(invokeMock).toHaveBeenCalledWith("cancel_model_download", { request: { downloadId: "download-1" } });
+  });
+
+  it("offers retry after verification failure and hides details outside Developer Mode", async () => {
+    const user = userEvent.setup();
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: "llama3.2:latest",
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") return Promise.resolve([]);
+      if (command === "run_system_check") return Promise.resolve(fullSystemCheckResult);
+      if (command === "check_ollama_status") return Promise.resolve({ ...readyOllamaStatus, modelCount: 0, modelNames: [], modelsInstalled: false });
+      if (command === "model_selection_state") {
+        return Promise.resolve({ ...readyModelSelectionState, installedModels: [], selectedModelInstalled: false, fallbackModel: null });
+      }
+      if (command === "start_model_download") return Promise.resolve({ downloadId: "download-1" });
+      if (command === "verify_model") {
+        return Promise.reject({
+          kind: "requestFailed",
+          message: "Verification failed.",
+          action: "Try again.",
+          diagnostics: "raw verification detail"
+        });
+      }
+      if (command === "save_settings" || command === "save_conversation") return Promise.resolve(args);
+      if (command === "load_conversation" || command === "load_active_conversation") return Promise.resolve(null);
+      if (command === "list_conversations" || command === "search_conversations") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    await openModelSelectionStep(user);
+    await user.click(await screen.findByRole("button", { name: "Install" }));
+    emitModelDownload({ type: "completed", downloadId: "download-1", model: "qwen3:8b" });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("The download finished, but I could not verify the model yet.");
+    expect(screen.queryByText("raw verification detail")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry Verification" })).toBeInTheDocument();
+  });
+
+  it("renders long model names without losing controls", async () => {
+    const user = userEvent.setup();
+    const longModel = "aether-first-model-with-a-very-long-name-that-must-wrap-inside-the-window:latest";
+    invokeMock.mockImplementation((command, args) => {
+      if (command === "load_settings") {
+        return Promise.resolve({
+          theme: "crimson",
+          selectedModel: longModel,
+          fontSize: 16,
+          composerStyle: "subtle",
+          showContextCounter: false,
+          developerMode: false,
+          firstRun: true
+        });
+      }
+      if (command === "list_models") return Promise.resolve([{ name: longModel, provider: "Ollama" }]);
+      if (command === "run_system_check") return Promise.resolve(fullSystemCheckResult);
+      if (command === "check_ollama_status") return Promise.resolve({ ...readyOllamaStatus, modelNames: [longModel], modelCount: 1 });
+      if (command === "model_selection_state") {
+        return Promise.resolve({
+          ...readyModelSelectionState,
+          installedModels: [{ name: longModel, provider: "Ollama" }],
+          selectedModel: longModel,
+          selectedModelInstalled: true,
+          fallbackModel: longModel
+        });
+      }
+      if (command === "save_settings" || command === "save_conversation") return Promise.resolve(args);
+      if (command === "load_conversation" || command === "load_active_conversation") return Promise.resolve(null);
+      if (command === "list_conversations" || command === "search_conversations") return Promise.resolve([]);
+      return Promise.resolve({});
+    });
+
+    await openModelSelectionStep(user);
+
+    expect(await screen.findByText(longModel)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
   it("bypasses onboarding for existing settings without a first-run flag", async () => {

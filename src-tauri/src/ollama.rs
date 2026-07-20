@@ -16,6 +16,7 @@ use std::time::Duration;
 const OLLAMA_GENERATE_URL: &str = "http://127.0.0.1:11434/api/generate";
 const OLLAMA_TAGS_URL: &str = "http://127.0.0.1:11434/api/tags";
 const OLLAMA_VERSION_URL: &str = "http://127.0.0.1:11434/api/version";
+const OLLAMA_PULL_URL: &str = "http://127.0.0.1:11434/api/pull";
 const OLLAMA_STATUS_TIMEOUT_MS: u64 = 1_500;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
@@ -25,23 +26,31 @@ pub struct OllamaProvider {
     generate_url: String,
     tags_url: String,
     version_url: String,
+    pull_url: String,
 }
 
 impl OllamaProvider {
     pub fn local() -> Self {
-        Self::new(OLLAMA_GENERATE_URL, OLLAMA_TAGS_URL, OLLAMA_VERSION_URL)
+        Self::new(
+            OLLAMA_GENERATE_URL,
+            OLLAMA_TAGS_URL,
+            OLLAMA_VERSION_URL,
+            OLLAMA_PULL_URL,
+        )
     }
 
     pub fn new(
         generate_url: impl Into<String>,
         tags_url: impl Into<String>,
         version_url: impl Into<String>,
+        pull_url: impl Into<String>,
     ) -> Self {
         Self {
             client: reqwest::Client::new(),
             generate_url: generate_url.into(),
             tags_url: tags_url.into(),
             version_url: version_url.into(),
+            pull_url: pull_url.into(),
         }
     }
 
@@ -54,6 +63,7 @@ impl OllamaProvider {
             generate_url: OLLAMA_GENERATE_URL.to_string(),
             tags_url: OLLAMA_TAGS_URL.to_string(),
             version_url: OLLAMA_VERSION_URL.to_string(),
+            pull_url: OLLAMA_PULL_URL.to_string(),
         }
     }
 }
@@ -62,6 +72,12 @@ impl OllamaProvider {
 struct OllamaGenerateRequest<'a> {
     model: &'a str,
     prompt: &'a str,
+    stream: bool,
+}
+
+#[derive(Debug, Serialize)]
+struct OllamaPullRequest<'a> {
+    name: &'a str,
     stream: bool,
 }
 
@@ -97,6 +113,14 @@ struct OllamaVersionResponse {
     version: Option<String>,
 }
 
+#[derive(Debug, Deserialize)]
+struct OllamaPullResponse {
+    status: Option<String>,
+    completed: Option<u64>,
+    total: Option<u64>,
+    error: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OllamaStatus {
@@ -116,6 +140,23 @@ pub enum OllamaStatusField {
     Installation,
     Version,
     Models,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelDownloadProgress {
+    pub status: ModelDownloadStatus,
+    pub message: String,
+    pub percentage: Option<f64>,
+    pub completed_bytes: Option<u64>,
+    pub total_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModelDownloadStatus {
+    Downloading,
+    Complete,
 }
 
 impl OllamaStatus {
@@ -238,6 +279,192 @@ impl OllamaProvider {
             .map_err(|error| ProviderError::request_failed(error.to_string()))?;
 
         Ok(body.version)
+    }
+
+    pub async fn pull_model<F>(
+        &self,
+        model: &str,
+        cancellation: CancellationToken,
+        mut on_progress: F,
+    ) -> Result<(), ProviderError>
+    where
+        F: FnMut(ModelDownloadProgress) + Send,
+    {
+        validate_model_name(model).map_err(ProviderError::request_failed)?;
+
+        let pull_request = OllamaPullRequest {
+            name: model,
+            stream: true,
+        };
+        let response = self
+            .client
+            .post(&self.pull_url)
+            .json(&pull_request)
+            .send()
+            .await
+            .map_err(normalize_ollama_transport_error)?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            return Err(ProviderError::request_failed(format!(
+                "Ollama returned HTTP {status} while downloading a model."
+            )));
+        }
+
+        let mut stream = response.bytes_stream();
+        let mut pending = String::new();
+        let mut saw_complete = false;
+
+        while let Some(chunk) = stream.next().await {
+            if cancellation.is_cancelled() {
+                return Err(ProviderError {
+                    kind: crate::model_provider::ProviderErrorKind::Cancelled,
+                    message: "The model download was cancelled.".to_string(),
+                    action: "Choose a model and try again when you are ready.".to_string(),
+                    diagnostics: None,
+                });
+            }
+
+            let chunk = chunk.map_err(|error| ProviderError::request_failed(error.to_string()))?;
+            pending.push_str(&String::from_utf8_lossy(&chunk));
+
+            while let Some(newline_index) = pending.find('\n') {
+                let line = pending[..newline_index].trim().to_string();
+                pending = pending[newline_index + 1..].to_string();
+                if let Some(progress) = parse_pull_progress_line(&line)? {
+                    saw_complete = progress.status == ModelDownloadStatus::Complete;
+                    on_progress(progress);
+                }
+            }
+        }
+
+        if !pending.trim().is_empty() {
+            if let Some(progress) = parse_pull_progress_line(pending.trim())? {
+                saw_complete = progress.status == ModelDownloadStatus::Complete;
+                on_progress(progress);
+            }
+        }
+
+        if !saw_complete {
+            on_progress(ModelDownloadProgress {
+                status: ModelDownloadStatus::Complete,
+                message: "Download complete.".to_string(),
+                percentage: Some(100.0),
+                completed_bytes: None,
+                total_bytes: None,
+            });
+        }
+
+        Ok(())
+    }
+}
+
+pub fn validate_model_name(model: &str) -> Result<(), String> {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        return Err("Model name cannot be empty.".to_string());
+    }
+    if trimmed.len() > 96 {
+        return Err("Model name is too long.".to_string());
+    }
+    if trimmed != model {
+        return Err("Model name must not include surrounding whitespace.".to_string());
+    }
+    if !trimmed.chars().all(|character| {
+        character.is_ascii_alphanumeric() || matches!(character, '.' | '_' | '-' | ':' | '/')
+    }) {
+        return Err("Model name contains unsupported characters.".to_string());
+    }
+    Ok(())
+}
+
+fn parse_pull_progress_line(line: &str) -> Result<Option<ModelDownloadProgress>, ProviderError> {
+    if line.trim().is_empty() {
+        return Ok(None);
+    }
+
+    let payload: OllamaPullResponse = serde_json::from_str(line)
+        .map_err(|error| ProviderError::request_failed(error.to_string()))?;
+
+    if let Some(error) = payload.error {
+        return Err(ProviderError::request_failed(error));
+    }
+
+    let message = payload
+        .status
+        .unwrap_or_else(|| "Downloading model.".to_string());
+    let percentage = match (payload.completed, payload.total) {
+        (Some(completed), Some(total)) if total > 0 => {
+            Some(((completed as f64 / total as f64) * 100.0).min(100.0))
+        }
+        _ => {
+            if message.to_lowercase().contains("success") {
+                Some(100.0)
+            } else {
+                None
+            }
+        }
+    };
+    let status = if percentage == Some(100.0) || message.to_lowercase().contains("success") {
+        ModelDownloadStatus::Complete
+    } else {
+        ModelDownloadStatus::Downloading
+    };
+
+    Ok(Some(ModelDownloadProgress {
+        status,
+        message,
+        percentage,
+        completed_bytes: payload.completed,
+        total_bytes: payload.total,
+    }))
+}
+
+pub async fn verify_local_model(model: &str) -> Result<(), ProviderError> {
+    validate_model_name(model).map_err(ProviderError::request_failed)?;
+
+    let provider = OllamaProvider::local();
+    verify_model_with_provider(&provider, model).await
+}
+
+async fn verify_model_with_provider(
+    provider: &OllamaProvider,
+    model: &str,
+) -> Result<(), ProviderError> {
+    validate_model_name(model).map_err(ProviderError::request_failed)?;
+
+    let cancellation = CancellationToken::default();
+    let received_content = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+    let content_for_handler = received_content.clone();
+    let handler: StreamEventHandler = std::sync::Arc::new(move |event| {
+        if let ProviderStreamEvent::Chunk { content } = event {
+            if let Ok(mut response) = content_for_handler.lock() {
+                response.push_str(&content);
+            }
+        }
+    });
+
+    provider
+        .stream_message(
+            ConversationRequest {
+                model: model.to_string(),
+                message: "Reply only with:\n\nSetup successful.".to_string(),
+            },
+            cancellation,
+            handler,
+        )
+        .await?;
+
+    let response = received_content
+        .lock()
+        .map(|content| content.trim().to_lowercase())
+        .unwrap_or_default();
+    if response.contains("setup successful") {
+        Ok(())
+    } else {
+        Err(ProviderError::request_failed(
+            "The model responded, but did not complete the setup verification.",
+        ))
     }
 }
 
@@ -611,6 +838,7 @@ mod tests {
             generate_url: format!("{base_url}/api/generate"),
             tags_url: format!("{base_url}/api/tags"),
             version_url: format!("{base_url}/api/version"),
+            pull_url: format!("{base_url}/api/pull"),
         }
     }
 
@@ -858,5 +1086,113 @@ mod tests {
         assert!(!serialized.to_lowercase().contains("serial"));
         assert!(!serialized.to_lowercase().contains("users"));
         assert!(!serialized.contains('\\'));
+    }
+
+    #[test]
+    fn model_name_validation_rejects_unsafe_input() {
+        assert!(validate_model_name("qwen3:8b").is_ok());
+        assert!(validate_model_name("llama3.2").is_ok());
+        assert!(validate_model_name(" qwen3:8b").is_err());
+        assert!(validate_model_name("qwen3:8b && calc").is_err());
+        assert!(validate_model_name("").is_err());
+    }
+
+    #[tokio::test]
+    async fn pull_model_reports_progress_and_completion() {
+        let base_url = spawn_ollama_server(vec![MockRoute {
+            path: "/api/pull",
+            status: "200 OK",
+            body: "{\"status\":\"pulling manifest\"}\n{\"status\":\"downloading\",\"completed\":50,\"total\":100}\n{\"status\":\"success\"}\n",
+            delay_ms: 0,
+        }]);
+        let provider = test_provider(&base_url);
+        let mut events = Vec::new();
+
+        provider
+            .pull_model("qwen3:8b", CancellationToken::default(), |progress| {
+                events.push(progress);
+            })
+            .await
+            .expect("download succeeds");
+
+        assert!(events.iter().any(|event| event.percentage == Some(50.0)));
+        assert_eq!(
+            events.last().map(|event| event.status),
+            Some(ModelDownloadStatus::Complete)
+        );
+    }
+
+    #[tokio::test]
+    async fn pull_model_can_be_cancelled() {
+        let base_url = spawn_ollama_server(vec![MockRoute {
+            path: "/api/pull",
+            status: "200 OK",
+            body: "{\"status\":\"downloading\",\"completed\":50,\"total\":100}\n",
+            delay_ms: 0,
+        }]);
+        let provider = test_provider(&base_url);
+        let cancellation = CancellationToken::default();
+        cancellation.cancel();
+        let error = provider
+            .pull_model("qwen3:8b", cancellation, |_| {})
+            .await
+            .expect_err("download is cancelled");
+
+        assert_eq!(
+            error.kind,
+            crate::model_provider::ProviderErrorKind::Cancelled
+        );
+    }
+
+    #[tokio::test]
+    async fn pull_model_reports_download_failure() {
+        let base_url = spawn_ollama_server(vec![MockRoute {
+            path: "/api/pull",
+            status: "200 OK",
+            body: "{\"error\":\"network interrupted\"}\n",
+            delay_ms: 0,
+        }]);
+        let provider = test_provider(&base_url);
+        let error = provider
+            .pull_model("qwen3:8b", CancellationToken::default(), |_| {})
+            .await
+            .expect_err("download fails");
+
+        assert_eq!(
+            error.kind,
+            crate::model_provider::ProviderErrorKind::RequestFailed
+        );
+    }
+
+    #[tokio::test]
+    async fn verify_model_accepts_streaming_setup_success() {
+        let base_url = spawn_ollama_server(vec![MockRoute {
+            path: "/api/generate",
+            status: "200 OK",
+            body: "{\"response\":\"Setup successful.\",\"done\":false}\n{\"done\":true}\n",
+            delay_ms: 0,
+        }]);
+
+        verify_model_with_provider(&test_provider(&base_url), "qwen3:8b")
+            .await
+            .expect("verification succeeds");
+    }
+
+    #[tokio::test]
+    async fn verify_model_fails_without_expected_response() {
+        let base_url = spawn_ollama_server(vec![MockRoute {
+            path: "/api/generate",
+            status: "200 OK",
+            body: "{\"response\":\"Ready.\",\"done\":false}\n{\"done\":true}\n",
+            delay_ms: 0,
+        }]);
+        let error = verify_model_with_provider(&test_provider(&base_url), "qwen3:8b")
+            .await
+            .expect_err("verification fails");
+
+        assert_eq!(
+            error.kind,
+            crate::model_provider::ProviderErrorKind::RequestFailed
+        );
     }
 }

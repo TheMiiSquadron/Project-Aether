@@ -1,0 +1,25 @@
+{
+  "recommended": {
+    "name": "qwen3:8b",
+    "title": "Qwen3 8B",
+    "description": "Balanced speed, quality, and hardware requirements.",
+    "detail": "Suitable for most users."
+  },
+  "alternatives": [
+    {
+      "name": "llama3.2",
+      "title": "Llama 3.2",
+      "description": "A dependable general-purpose local model."
+    },
+    {
+      "name": "gemma3",
+      "title": "Gemma",
+      "description": "A compact option for everyday local assistance."
+    },
+    {
+      "name": "deepseek-r1:8b",
+      "title": "DeepSeek",
+      "description": "A reasoning-focused option for technical work."
+    }
+  ]
+}

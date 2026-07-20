@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ChevronDown,
+  Check,
   Clipboard,
   Download,
   ExternalLink,
@@ -168,6 +169,44 @@ type OllamaStatus = {
   unavailableFields: OllamaStatusField[];
 };
 
+type RecommendedModel = {
+  name: string;
+  title: string;
+  description: string;
+  detail?: string | null;
+};
+
+type ModelRecommendationCatalog = {
+  recommended: RecommendedModel;
+  alternatives: RecommendedModel[];
+};
+
+type ModelSelectionState = {
+  recommendations: ModelRecommendationCatalog;
+  installedModels: AvailableModel[];
+  selectedModel?: string | null;
+  selectedModelInstalled: boolean;
+  fallbackModel?: string | null;
+};
+
+type ModelDownloadProgress = {
+  status: "downloading" | "complete";
+  message: string;
+  percentage?: number | null;
+  completedBytes?: number | null;
+  totalBytes?: number | null;
+};
+
+type ModelDownloadEvent =
+  | { type: "progress"; downloadId: string; model: string; progress: ModelDownloadProgress }
+  | { type: "completed"; downloadId: string; model: string }
+  | { type: "cancelled"; downloadId: string; model: string }
+  | { type: "failed"; downloadId: string; model: string; error: ProviderErrorPayload };
+
+type StartModelDownloadResponse = {
+  downloadId: string;
+};
+
 type ConversationStreamEvent =
   | { type: "started"; model: string }
   | { type: "chunk"; content: string }
@@ -222,9 +261,9 @@ const onboardingSteps = [
   {
     id: "model-selection",
     eyebrow: "Model Selection",
-    title: "We'll choose a model here later.",
-    body: "When this step becomes active, I'll help you pick from installed local models. Today, your current model setting stays untouched.",
-    status: "Placeholder"
+    title: "Let's choose your first model.",
+    body: "If you already have a local model, we can use it. If not, I'll guide the first download and check that it works.",
+    status: "Model setup"
   },
   {
     id: "personalization",
@@ -280,16 +319,22 @@ function ComposerActionButton({
 type OnboardingFlowProps = {
   onFinish: () => void;
   developerMode: boolean;
+  selectedModel: string;
+  onModelSelected: (model: string) => void;
+  onModelsChanged: () => void;
 };
 
-function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
+function OnboardingFlow({ onFinish, developerMode, selectedModel, onModelSelected, onModelsChanged }: OnboardingFlowProps) {
   const [stepIndex, setStepIndex] = useState(0);
   const [ollamaReachable, setOllamaReachable] = useState<boolean | null>(null);
+  const [modelSelectionReady, setModelSelectionReady] = useState(false);
   const step = onboardingSteps[stepIndex];
   const isFirstStep = stepIndex === 0;
   const isLastStep = stepIndex === onboardingSteps.length - 1;
   const isOllamaStep = step.id === "ollama";
+  const isModelSelectionStep = step.id === "model-selection";
   const nextLabel = isLastStep ? "Finish" : isOllamaStep && !ollamaReachable ? "Set Up Later" : "Next";
+  const nextDisabled = isModelSelectionStep && !modelSelectionReady;
 
   return (
     <section className="welcome-flow" aria-label="Aether welcome experience">
@@ -306,7 +351,11 @@ function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
         </div>
 
         <div
-          className={`welcome-card ${step.id === "system-check" || step.id === "ollama" ? "welcome-card--interactive" : ""}`}
+          className={`welcome-card ${
+            step.id === "system-check" || step.id === "ollama" || step.id === "model-selection"
+              ? "welcome-card--interactive"
+              : ""
+          }`}
           key={step.id}
         >
           <p className="welcome-card__eyebrow">{step.eyebrow}</p>
@@ -315,6 +364,18 @@ function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
           {step.id === "system-check" ? <SystemCheckPanel developerMode={developerMode} /> : null}
           {step.id === "ollama" ? (
             <OllamaSetupPanel developerMode={developerMode} onReachableChange={setOllamaReachable} />
+          ) : null}
+          {step.id === "model-selection" ? (
+            <ModelSelectionPanel
+              developerMode={developerMode}
+              selectedModel={selectedModel}
+              onModelReady={(model) => {
+                onModelSelected(model);
+                setModelSelectionReady(true);
+              }}
+              onModelPending={() => setModelSelectionReady(false)}
+              onModelsChanged={onModelsChanged}
+            />
           ) : null}
           <span className="welcome-card__status">{step.status}</span>
         </div>
@@ -337,6 +398,7 @@ function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
           <button
             className="welcome-nav-button welcome-nav-button--primary"
             type="button"
+            disabled={nextDisabled}
             onClick={() => {
               if (isLastStep) {
                 onFinish();
@@ -351,6 +413,315 @@ function OnboardingFlow({ onFinish, developerMode }: OnboardingFlowProps) {
         </div>
       </div>
     </section>
+  );
+}
+
+type ModelSelectionPanelProps = {
+  developerMode: boolean;
+  selectedModel: string;
+  onModelReady: (model: string) => void;
+  onModelPending: () => void;
+  onModelsChanged: () => void;
+};
+
+function ModelSelectionPanel({
+  developerMode,
+  selectedModel,
+  onModelReady,
+  onModelPending,
+  onModelsChanged
+}: ModelSelectionPanelProps) {
+  const [state, setState] = useState<
+    "loading" | "selection" | "downloading" | "verifying" | "ready" | "failed" | "verificationFailed"
+  >("loading");
+  const [selectionState, setSelectionState] = useState<ModelSelectionState | null>(null);
+  const [activeModel, setActiveModel] = useState<string | null>(null);
+  const [downloadId, setDownloadId] = useState<string | null>(null);
+  const [progress, setProgress] = useState<ModelDownloadProgress | null>(null);
+  const [downloadStartedAt, setDownloadStartedAt] = useState<number | null>(null);
+  const [error, setError] = useState<ProviderErrorPayload | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    onModelPending();
+    setState("loading");
+    setError(null);
+
+    invoke<ModelSelectionState>("model_selection_state", { request: { selectedModel } })
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setSelectionState(response);
+        const installedChoice = response.selectedModelInstalled
+          ? response.selectedModel
+          : response.fallbackModel || response.installedModels[0]?.name;
+        if (installedChoice) {
+          setActiveModel(installedChoice);
+          onModelReady(installedChoice);
+          setState("ready");
+          return;
+        }
+        setActiveModel(response.recommendations.recommended.name);
+        setState("selection");
+      })
+      .catch((caughtError) => {
+        if (cancelled) {
+          return;
+        }
+        setError(normalizeProviderError(caughtError));
+        setState("failed");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedModel, reloadKey]);
+
+  useEffect(() => {
+    let mounted = true;
+    let unlisten: (() => void) | undefined;
+    listen<ModelDownloadEvent>("model-download-progress", (event) => {
+      if (!mounted || event.payload.downloadId !== downloadId) {
+        return;
+      }
+
+      if (event.payload.type === "progress") {
+        setProgress(event.payload.progress);
+      }
+      if (event.payload.type === "completed") {
+        void verifyDownloadedModel(event.payload.model);
+      }
+      if (event.payload.type === "cancelled") {
+        setDownloadId(null);
+        setProgress(null);
+        setDownloadStartedAt(null);
+        setState("selection");
+      }
+      if (event.payload.type === "failed") {
+        setDownloadId(null);
+        setError(event.payload.error);
+        setState("failed");
+      }
+    }).then((dispose) => {
+      unlisten = dispose;
+    });
+
+    return () => {
+      mounted = false;
+      unlisten?.();
+    };
+  }, [downloadId]);
+
+  const recommendation = selectionState?.recommendations.recommended;
+  const alternatives = selectionState?.recommendations.alternatives ?? [];
+  const installedModels = selectionState?.installedModels ?? [];
+  const selectedRecommendation = activeModel || recommendation?.name || "";
+  const progressPercent = Math.round(progress?.percentage ?? 0);
+  const transfer = formatDownloadTransfer(progress, downloadStartedAt);
+
+  const installModel = (model: string) => {
+    onModelPending();
+    setActiveModel(model);
+    setError(null);
+    setProgress({
+      status: "downloading",
+      message: "Starting download.",
+      percentage: 0,
+      completedBytes: null,
+      totalBytes: null
+    });
+    setDownloadStartedAt(Date.now());
+    setState("downloading");
+    invoke<StartModelDownloadResponse>("start_model_download", { request: { model } })
+      .then((response) => {
+        setDownloadId(response.downloadId);
+      })
+      .catch((caughtError) => {
+        setDownloadId(null);
+        setError(normalizeProviderError(caughtError));
+        setState("failed");
+      });
+  };
+
+  const cancelDownload = () => {
+    if (!downloadId) {
+      setState("selection");
+      return;
+    }
+    void invoke("cancel_model_download", { request: { downloadId } });
+    setDownloadId(null);
+    setProgress(null);
+    setDownloadStartedAt(null);
+    setState("selection");
+  };
+
+  const verifyDownloadedModel = async (model: string) => {
+    setState("verifying");
+    setError(null);
+    try {
+      await invoke("verify_model", { request: { model } });
+      setDownloadId(null);
+      setProgress(null);
+      setDownloadStartedAt(null);
+      setActiveModel(model);
+      onModelReady(model);
+      onModelsChanged();
+      setState("ready");
+    } catch (caughtError) {
+      setDownloadId(null);
+      setError(normalizeProviderError(caughtError));
+      setState("verificationFailed");
+    }
+  };
+
+  if (state === "loading") {
+    return (
+      <div className="model-selection-panel" aria-live="polite">
+        <div className="system-check-loading" aria-hidden="true" />
+        <p>I'm checking your local models.</p>
+      </div>
+    );
+  }
+
+  if (state === "failed") {
+    return (
+      <div className="model-selection-panel" role="alert">
+        <p>I could not finish the model setup step. We can try again without changing anything.</p>
+        {developerMode && error?.diagnostics ? <code>{error.diagnostics}</code> : null}
+        <div className="welcome-action-row">
+          <button className="welcome-inline-button" type="button" onClick={() => setReloadKey((current) => current + 1)}>
+            <RefreshCw size={15} aria-hidden="true" />
+            <span>Retry</span>
+          </button>
+          {activeModel ? (
+            <button className="welcome-inline-button" type="button" onClick={() => installModel(activeModel)}>
+              <Download size={15} aria-hidden="true" />
+              <span>Try Download Again</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  if (state === "downloading") {
+    return (
+      <div className="model-selection-panel" aria-live="polite">
+        <p>I'm downloading your first model. This may take a few minutes depending on your internet connection.</p>
+        <div className="model-progress" aria-label="Model download progress">
+          <div className="model-progress__bar">
+            <span style={{ width: `${Math.max(0, Math.min(100, progressPercent))}%` }} />
+          </div>
+          <div className="model-progress__meta">
+            <strong>{progress?.percentage == null ? "Preparing..." : `${progressPercent}%`}</strong>
+            <span>{transfer}</span>
+          </div>
+          <p>{progress?.message || "Downloading model."}</p>
+        </div>
+        <div className="welcome-action-row">
+          <button className="welcome-inline-button" type="button" onClick={cancelDownload}>
+            <X size={15} aria-hidden="true" />
+            <span>Cancel</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state === "verifying") {
+    return (
+      <div className="model-selection-panel" aria-live="polite">
+        <div className="system-check-loading" aria-hidden="true" />
+        <p>I'm checking that the model can respond through Aether.</p>
+      </div>
+    );
+  }
+
+  if (state === "verificationFailed") {
+    return (
+      <div className="model-selection-panel" role="alert">
+        <p>The download finished, but I could not verify the model yet. Please try the check again.</p>
+        {developerMode && error?.diagnostics ? <code>{error.diagnostics}</code> : null}
+        <div className="welcome-action-row">
+          <button
+            className="welcome-inline-button"
+            type="button"
+            onClick={() => activeModel && void verifyDownloadedModel(activeModel)}
+          >
+            <RefreshCw size={15} aria-hidden="true" />
+            <span>Retry Verification</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (state === "ready") {
+    return (
+      <div className="model-selection-panel" aria-live="polite">
+        <p>
+          <Check size={16} aria-hidden="true" /> Model Ready
+        </p>
+        <p>Everything looks good. Your first model is ready.</p>
+        {installedModels.length ? (
+          <div className="model-existing-list" aria-label="Installed local models">
+            {installedModels.map((model) => (
+              <button
+                key={model.name}
+                className="model-choice-button"
+                type="button"
+                aria-pressed={activeModel === model.name}
+                onClick={() => {
+                  setActiveModel(model.name);
+                  onModelReady(model.name);
+                }}
+              >
+                <span>{model.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className="model-selection-panel" aria-live="polite">
+      <p>No models are installed yet. Let's download your first one.</p>
+      {recommendation ? (
+        <section className="model-recommendation-card" aria-label="Recommended model">
+          <span className="model-recommendation-card__rating">★★★★★ Recommended</span>
+          <h2>{recommendation.title}</h2>
+          <p>{recommendation.description}</p>
+          {recommendation.detail ? <p>{recommendation.detail}</p> : null}
+          <button className="welcome-inline-button" type="button" onClick={() => installModel(recommendation.name)}>
+            <Download size={15} aria-hidden="true" />
+            <span>Install</span>
+          </button>
+        </section>
+      ) : null}
+      {alternatives.length ? (
+        <section className="model-alternatives" aria-label="Additional model options">
+          <h2>Additional models</h2>
+          <div className="model-existing-list">
+            {alternatives.map((model) => (
+              <button
+                key={model.name}
+                className="model-choice-button"
+                type="button"
+                aria-pressed={selectedRecommendation === model.name}
+                onClick={() => installModel(model.name)}
+              >
+                <strong>{model.title}</strong>
+                <span>{model.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      ) : null}
+    </div>
   );
 }
 
@@ -1266,7 +1637,13 @@ export function App() {
           <span>Nova</span>
         </section>
       ) : settings.firstRun ? (
-        <OnboardingFlow onFinish={completeWelcomeFlow} developerMode={settings.developerMode} />
+        <OnboardingFlow
+          onFinish={completeWelcomeFlow}
+          developerMode={settings.developerMode}
+          selectedModel={settings.selectedModel}
+          onModelSelected={(model) => setSettings((current) => ({ ...current, selectedModel: model }))}
+          onModelsChanged={() => void refreshModels()}
+        />
       ) : (
       <>
       <aside className="history-sidebar" aria-label="Conversation history">
@@ -1756,6 +2133,39 @@ function formatBytes(value?: number | null) {
 
   const precision = unitIndex <= 1 || size >= 10 ? 0 : 1;
   return `${size.toFixed(precision)} ${units[unitIndex]}`;
+}
+
+function formatDownloadTransfer(progress: ModelDownloadProgress | null, startedAt: number | null) {
+  if (!progress?.completedBytes || !progress.totalBytes || !startedAt) {
+    return "Speed and time remaining will appear when available.";
+  }
+
+  const elapsedSeconds = Math.max(1, (Date.now() - startedAt) / 1000);
+  const bytesPerSecond = progress.completedBytes / elapsedSeconds;
+  const remainingBytes = Math.max(0, progress.totalBytes - progress.completedBytes);
+  const remainingSeconds = bytesPerSecond > 0 ? remainingBytes / bytesPerSecond : null;
+  const speed = `${formatBytes(bytesPerSecond)}/s`;
+  const remaining = `${formatBytes(remainingBytes)} remaining`;
+  const eta = remainingSeconds == null ? "time estimating" : `${formatDuration(remainingSeconds)} left`;
+
+  return `${speed} - ${remaining} - ${eta}`;
+}
+
+function formatDuration(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return "less than a minute";
+  }
+  const rounded = Math.ceil(seconds);
+  if (rounded < 60) {
+    return `${rounded}s`;
+  }
+  const minutes = Math.ceil(rounded / 60);
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
 }
 
 function formatUnavailableFields(fields: SystemCheckField[]) {
